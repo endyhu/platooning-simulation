@@ -1,9 +1,9 @@
-import pyglet
 import numpy as np
+import pyglet as pg
 
 from pyglet.window import key
 
-PLATFORM = pyglet.window.get_platform()
+PLATFORM = pg.window.get_platform()
 DISPLAY = PLATFORM.get_default_display()
 SCREEN = DISPLAY.get_default_screen()
 
@@ -12,8 +12,9 @@ WINDOW_HEIGHT = 600
 
 TITLE = "Platooning Simulator"
 
-background_img = pyglet.image.load("./assets/grass.png")
-car_img = pyglet.image.load("./assets/car.png")
+background_img = pg.image.load("./assets/grass.png")
+road_img = pg.image.load("./assets/road.png")
+car_img = pg.image.load("./assets/car.png")
 
 def centerImage(image):
     image.anchor_x = image.width // 2
@@ -31,13 +32,17 @@ class Object:
         self.pos_y = pos_y
 
         if image is not None:
-            self.sprite = pyglet.sprite.Sprite(image, pos_x, pos_y)
+            self.sprite = pg.sprite.Sprite(image, pos_x, pos_y)
 
     def draw(self):
         self.sprite.draw()
 
     def update(self, dt):
         pass
+
+class RoadObject(Object):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
 class CarObject(Object):
     def __init__(self, *args, **kwargs):
@@ -55,7 +60,7 @@ class CarObject(Object):
         self.max_tyre_angle = 30.0
         self.max_acceleration = 59.1
         self.max_velocity = 277.8
-        self.max_velocity_r = -166.7
+        self.max_velocity_r = -69.4
 
     def handleKeys(self):
         if keys[key.W]:
@@ -64,11 +69,15 @@ class CarObject(Object):
             self.steering = -10
         if keys[key.S]:
             self.acceleration = -self.max_acceleration * 0.8
+            if self.velocity > 0.0:
+                self.acceleration = -self.brk_deceleration
         if keys[key.D]:
             self.steering = 10
         if keys[key.SPACE]:
             self.acceleration = -np.sign(self.velocity) * self.brk_deceleration
 
+        if keys[key.W] and keys[key.S]:
+            self.acceleration = -np.sign(self.velocity) * self.brk_deceleration
         if keys[key.A] and keys[key.D]:
             self.steering = 0
 
@@ -121,7 +130,7 @@ class CarObject(Object):
         self.sprite.x = self.sprite.x + self.velocity * velocity_x * dt
         self.sprite.y = self.sprite.y + self.velocity * velocity_y * dt
 
-class Window(pyglet.window.Window):
+class Window(pg.window.Window):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.frame_rate = 1/60.0
@@ -130,12 +139,13 @@ class Window(pyglet.window.Window):
         location_y = (SCREEN.height // 2) - (WINDOW_HEIGHT // 2)
         self.set_location(location_x, location_y)
 
-        self.background = pyglet.sprite.Sprite(background_img, x=0, y=0)
-
-        self.car = CarObject(300, 300, car_img)
+        self.background = pg.sprite.Sprite(background_img, x=0, y=0)
+        
+        self.road = RoadObject(0, (WINDOW_HEIGHT // 2) - (road_img.height // 2), road_img)
+        self.car = CarObject(200, WINDOW_HEIGHT // 2, car_img)
 
     # def on_key_press(self, symbol, modifiers):
-        # image_data = pyglet.image.get_buffer_manager().get_color_buffer().get_image_data().data
+        # image_data = pg.image.get_buffer_manager().get_color_buffer().get_image_data().data
         # image_data = np.frombuffer(image_data, dtype=np.uint8).reshape(WINDOW_HEIGHT, WINDOW_WIDTH, 4)
         # image_data = image_data[:, :, :-1]
 
@@ -145,6 +155,7 @@ class Window(pyglet.window.Window):
     def on_draw(self):
         self.clear()
         self.background.draw()
+        self.road.draw()
         self.car.draw()
 
     def update(self, dt):
@@ -156,5 +167,5 @@ if __name__ == "__main__":
     keys = key.KeyStateHandler()
     window.push_handlers(keys)
 
-    pyglet.clock.schedule_interval(window.update, window.frame_rate)
-    pyglet.app.run()
+    pg.clock.schedule_interval(window.update, window.frame_rate)
+    pg.app.run()
