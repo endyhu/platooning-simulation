@@ -21,7 +21,6 @@ def centerImage(image):
     image.anchor_y = image.height // 2
 
 def centerVehicleImage(image):
-    image.anchor_x = image.width // 5
     image.anchor_y = image.height // 2
 
 centerVehicleImage(car_img)
