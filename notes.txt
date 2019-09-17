@@ -1,4 +1,4 @@
-- stabiel rijden,
+- stabiel rijden
 - omgaan met snelheidsverschillen zonder dat instabiliteit ontstaat
 - van baan veranderen waar bij rekening gehouden over met wie zich op het baan bevind
 - optie : een afslag nemen
