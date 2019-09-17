@@ -3,8 +3,7 @@ import pyglet as pg
 
 from pyglet.window import key
 
-PLATFORM = pg.window.get_platform()
-DISPLAY = PLATFORM.get_default_display()
+DISPLAY = pg.canvas.get_display()
 SCREEN = DISPLAY.get_default_screen()
 
 WINDOW_WIDTH = 800
