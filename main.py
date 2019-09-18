@@ -68,7 +68,7 @@ class RoadObject(Object):
         self.sprite_batch.draw()
 
     def update(self, velocity, dt):
-        for i, sprite in enumerate(self.road_sprites):
+        for sprite in self.road_sprites:
             sprite.x = sprite.x - velocity * dt
             
             if sprite.x < -120:
@@ -81,7 +81,7 @@ class CarObject(Object):
         super().__init__(*args, **kwargs)
         self.length = self.sprite.width
 
-        self.steering = 0
+        self.steering = 0.0
         self.tyre_angle = 0.0
         self.acceleration = 0.0
         self.velocity = 0.0
@@ -95,6 +95,60 @@ class CarObject(Object):
         self.max_acceleration = 59.1
         self.max_velocity = 277.8
         self.max_velocity_r = -138.9
+
+    def reset(self):
+        self.sprite.x = self.pos_x
+        self.sprite.y = self.pos_y
+        self.sprite.rotation = 0.0
+
+        self.steering = 0
+        self.tyre_angle = 0.0
+        self.acceleration = 0.0
+        self.velocity = 0.0
+        self.velocity_x = 0.0
+        self.velocity_y = 0.0
+
+    def step(self, action):
+        # None, W, A, S, D, WA, WD, SA, SD
+        if action == 0:
+            self.acceleration = 0.0
+            self.steering = 0
+        elif action == 1:
+            self.acceleration = self.max_acceleration
+            if self.velocity < 0.0:
+                self.acceleration = self.brk_deceleration
+            self.steering = 0
+        elif action == 2:
+            self.acceleration = 0.0
+            self.steering = -1
+        elif action == 3:
+            self.acceleration = -self.max_acceleration * 0.8
+            if self.velocity > 0.0:
+                self.acceleration = -self.brk_deceleration
+            self.steering = 0
+        elif action == 4:
+            self.acceleration = 0.0
+            self.steering = 1
+        elif action == 5:
+            self.acceleration = self.max_acceleration
+            if self.velocity < 0.0:
+                self.acceleration = self.brk_deceleration
+            self.steering = -1
+        elif action == 6:
+            self.acceleration = self.max_acceleration
+            if self.velocity < 0.0:
+                self.acceleration = self.brk_deceleration
+            self.steering = 1
+        elif action == 7:
+            self.acceleration = -self.max_acceleration * 0.8
+            if self.velocity > 0.0:
+                self.acceleration = -self.brk_deceleration
+            self.steering = -1
+        elif action == 8:
+            self.acceleration = -self.max_acceleration * 0.8
+            if self.velocity > 0.0:
+                self.acceleration = -self.brk_deceleration
+            self.steering = 1
 
     def handleKeys(self):
         if keys[key.W]:
@@ -119,15 +173,15 @@ class CarObject(Object):
 
     def on_key_release(self, symbol, modifiers):
         if symbol == key.W:
-            self.acceleration = 0
+            self.acceleration = 0.0
         if symbol == key.A:
             self.steering = 0
         if symbol == key.S:
-            self.acceleration = 0
+            self.acceleration = 0.0
         if symbol == key.D:
             self.steering = 0
         if symbol == key.SPACE:
-            self.acceleration = 0
+            self.acceleration = 0.0
 
     def update(self, dt):
         if abs(self.tyre_angle) > self.max_tyre_angle:
@@ -179,6 +233,55 @@ class Window(pg.window.Window):
         
         self.road = RoadObject(5)
         self.car = CarObject(WINDOW_WIDTH/2, WINDOW_HEIGHT/2, car_img)
+
+        self.state = self.reset()
+
+    def preprocess(self, acceleration, velocity, tyre_angle, relative_angle, lane_distance):
+        acceleration = (acceleration + self.car.brk_deceleration) / (self.car.brk_deceleration * 2)
+        velocity = (velocity - self.car.max_velocity_r) / (self.car.max_velocity - self.car.max_velocity_r)
+        tyre_angle = (tyre_angle + self.car.max_tyre_angle) / (self.car.max_tyre_angle * 2)
+        relative_angle = (relative_angle + 180) / 360
+        lane_distance = (np.clip(lane_distance, -35, 35) + 35) / 70
+
+        return (acceleration, velocity, tyre_angle, relative_angle, lane_distance)
+
+    def reset(self):
+        self.car.reset()
+
+        relative_angle = (self.car.sprite.rotation % 360) if (self.car.sprite.rotation % 360) < 180 else (self.car.sprite.rotation % -180)
+
+        current_lane_y = self.road.road_sprites[-1].y + (self.road.road_sprites[-1].height / 2)
+        lane_distance = self.car.sprite.y - current_lane_y
+
+        state = self.preprocess(self.car.acceleration, self.car.velocity, self.car.tyre_angle, relative_angle, lane_distance)
+
+        return state
+
+    def step(self, action):
+        self.car.step(action)
+
+        relative_angle = (self.car.sprite.rotation % 360) if (self.car.sprite.rotation % 360) < 180 else (self.car.sprite.rotation % -180)
+
+        current_lane_y = self.road.road_sprites[-1].y + (self.road.road_sprites[-1].height / 2)
+        lane_distance = self.car.sprite.y - current_lane_y
+
+        state = self.preprocess(self.car.acceleration, self.car.velocity, self.car.tyre_angle, relative_angle, lane_distance)
+
+        reward = 0.0
+        if abs(lane_distance) > 4.0:
+            reward = -abs(state[-1] - 0.5)
+
+        done = False
+        if (self.car.sprite.y + (self.car.sprite.height // 2)) > (self.road.road_sprites[0].y + self.road.lane_width):
+            done = True
+        elif (self.car.sprite.y - (self.car.sprite.height // 2)) < self.road.road_sprites[-1].y:
+            done = True
+
+        return state, reward, done
+
+    def on_key_press(self, symbol, modifiers):
+        if symbol == key.R:
+            self.state = self.reset()
 
     def on_key_release(self, symbol, modifiers):
         self.car.on_key_release(symbol, modifiers)
