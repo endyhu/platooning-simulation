@@ -1,3 +1,4 @@
+import cv2
 import numpy as np
 import pyglet as pg
 
@@ -12,7 +13,10 @@ WINDOW_HEIGHT = 600
 TITLE = "Platooning Simulator"
 
 background_img = pg.image.load("./assets/grass.png")
-car_img = pg.image.load("./assets/car.png")
+car_img = pg.image.load("./assets/debug_car.png")
+sensor_img = pg.image.load("./assets/sensor.png")
+
+background_data = cv2.imread("./assets/grass.png")
 
 def centerImage(image):
     image.anchor_x = image.width // 2
@@ -78,10 +82,24 @@ class CarObject(Object):
         self.velocity_x = self.velocity * np.cos(np.deg2rad(self.sprite.rotation))
         self.velocity_y = self.velocity * -np.sin(np.deg2rad(self.sprite.rotation))
 
-        print(self.velocity, self.acceleration)
-
         self.sprite.x = self.sprite.x + self.velocity_x * dt
         self.sprite.y = self.sprite.y + self.velocity_y * dt
+
+class LineDetectorLeft(Object):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def update(self, dt, car):
+        self.sprite.x = car.x + (car.width / 3 * 2) * np.cos(np.deg2rad(car.rotation)) - (car.height / 2) * -np.sin(np.deg2rad(car.rotation))
+        self.sprite.y = car.y + (car.width / 3 * 2) * -np.sin(np.deg2rad(car.rotation)) + (car.height / 2) * np.cos(np.deg2rad(car.rotation))
+
+class LineDetectorRight(Object):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def update(self, dt, car):
+        self.sprite.x = car.x + (car.width / 3 * 2) * np.cos(np.deg2rad(car.rotation)) + (car.height / 2) * -np.sin(np.deg2rad(car.rotation))
+        self.sprite.y = car.y + (car.width / 3 * 2) * -np.sin(np.deg2rad(car.rotation)) - (car.height / 2) * np.cos(np.deg2rad(car.rotation))
 
 class Window(pg.window.Window):
     def __init__(self, *args, **kwargs):
@@ -95,15 +113,21 @@ class Window(pg.window.Window):
         self.background = pg.sprite.Sprite(background_img, x=0, y=0)
         
         self.car = CarObject(WINDOW_WIDTH/2, WINDOW_HEIGHT/2, car_img)
+        self.line_detector_left = LineDetectorLeft(0, 0, sensor_img)
+        self.line_detector_right = LineDetectorRight(0, 0, sensor_img)
 
     def on_draw(self):
         self.clear()
         self.background.draw()
         self.car.draw()
+        self.line_detector_left.draw()
+        self.line_detector_right.draw()
 
     def update(self, dt):
         self.car.handleKeys()
         self.car.update(dt)
+        self.line_detector_left.update(dt, self.car.sprite)
+        self.line_detector_right.update(dt, self.car.sprite)
 
 if __name__ == "__main__":
     window = Window(WINDOW_WIDTH, WINDOW_HEIGHT, TITLE)

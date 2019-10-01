@@ -37,11 +37,8 @@ class Object:
         if image is not None:
             self.sprite = pg.sprite.Sprite(image, pos_x, pos_y)
 
-    def draw(self,color):
-        
-        self.sprite.color = self.rgbcolors[color]
+    def draw(self):
         self.sprite.draw()
-
 
     def update(self, dt):
         pass
@@ -175,26 +172,16 @@ class Window(pg.window.Window):
         
         self.road = RoadObject(5)
         self.car = CarObject(WINDOW_WIDTH/2, WINDOW_HEIGHT/2, car_img)
-        self.car2 = CarObject(WINDOW_WIDTH/3, WINDOW_HEIGHT/2, car_img)
-
 
     def on_draw(self):
         self.clear()
         self.background.draw()
         self.road.draw()
-        self.car.draw("transparant")
-        self.car2.draw("gray")
-
 
     def update(self, dt):
         self.road.update(self.car.velocity_x, dt)
         self.car.handleKeys()
         self.car.update(dt)
-
-        self.car2.update(dt)
-        self.car2.handleKeys()
-
-
 
 if __name__ == "__main__":
     window = Window(WINDOW_WIDTH, WINDOW_HEIGHT, TITLE)
