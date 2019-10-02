@@ -12,11 +12,11 @@ WINDOW_HEIGHT = 600
 
 TITLE = "Platooning Simulator"
 
-background_img = pg.image.load("./assets/grass.png")
-car_img = pg.image.load("./assets/debug_car.png")
+background_img = pg.image.load("./assets/map.png")
+car_img = pg.image.load("./assets/car.png")
 sensor_img = pg.image.load("./assets/sensor.png")
 
-background_data = cv2.imread("./assets/grass.png")
+background_data = cv2.imread("./assets/map.png")
 
 def centerImage(image):
     image.anchor_x = image.width // 2
@@ -30,9 +30,6 @@ centerCarImage(car_img)
 
 class Object:
     def __init__(self, pos_x, pos_y, image=None):
-        self.pos_x = pos_x
-        self.pos_y = pos_y
-
         if image is not None:
             self.sprite = pg.sprite.Sprite(image, pos_x, pos_y)
 
@@ -63,7 +60,7 @@ class CarObject(Object):
         if keys[key.A]:
             self.steering = -1
         if keys[key.S]:
-            self.velocity = 0.0
+            self.acceleration = -self.max_acceleration
         if keys[key.D]:
             self.steering = 1
 
@@ -85,21 +82,38 @@ class CarObject(Object):
         self.sprite.x = self.sprite.x + self.velocity_x * dt
         self.sprite.y = self.sprite.y + self.velocity_y * dt
 
-class LineDetectorLeft(Object):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+class LineDetectors:
+    def __init__(self, car, show=False):
+        self.car = car
+        self.sprite_batch = pg.graphics.Batch()
+        self.detector_sprites = []
 
-    def update(self, dt, car):
-        self.sprite.x = car.x + (car.width / 3 * 2) * np.cos(np.deg2rad(car.rotation)) - (car.height / 2) * -np.sin(np.deg2rad(car.rotation))
-        self.sprite.y = car.y + (car.width / 3 * 2) * -np.sin(np.deg2rad(car.rotation)) + (car.height / 2) * np.cos(np.deg2rad(car.rotation))
+        if show:
+            for _ in range(2):
+                self.detector_sprites.append(pg.sprite.Sprite(sensor_img, 0, 0, batch=self.sprite_batch))
 
-class LineDetectorRight(Object):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def getData(self):
+        output_data = []
 
-    def update(self, dt, car):
-        self.sprite.x = car.x + (car.width / 3 * 2) * np.cos(np.deg2rad(car.rotation)) + (car.height / 2) * -np.sin(np.deg2rad(car.rotation))
-        self.sprite.y = car.y + (car.width / 3 * 2) * -np.sin(np.deg2rad(car.rotation)) - (car.height / 2) * np.cos(np.deg2rad(car.rotation))
+        for sprite in self.detector_sprites:
+            data = background_data[int(sprite.y), int(sprite.x)]
+            output_data.append(data)
+
+        return np.array(output_data)
+
+    def draw(self):
+        self.sprite_batch.draw()
+
+    def update(self, dt):
+        pos_x = self.car.sprite.x + (self.car.sprite.width / 3 * 2) * np.cos(np.deg2rad(self.car.sprite.rotation))
+        pos_y = self.car.sprite.y + (self.car.sprite.width / 3 * 2) * -np.sin(np.deg2rad(self.car.sprite.rotation))
+
+        for i, sprite in enumerate(self.detector_sprites):
+            offset_x = (1 - i * 2) * (self.car.sprite.height / 2) * np.sin(np.deg2rad(self.car.sprite.rotation))
+            offset_y = (1 - i * 2) * (self.car.sprite.height / 2) * np.cos(np.deg2rad(self.car.sprite.rotation))
+
+            sprite.x = pos_x + offset_x
+            sprite.y = pos_y + offset_y
 
 class Window(pg.window.Window):
     def __init__(self, *args, **kwargs):
@@ -113,21 +127,20 @@ class Window(pg.window.Window):
         self.background = pg.sprite.Sprite(background_img, x=0, y=0)
         
         self.car = CarObject(WINDOW_WIDTH/2, WINDOW_HEIGHT/2, car_img)
-        self.line_detector_left = LineDetectorLeft(0, 0, sensor_img)
-        self.line_detector_right = LineDetectorRight(0, 0, sensor_img)
+        self.line_detectors = LineDetectors(self.car, True)
 
     def on_draw(self):
         self.clear()
         self.background.draw()
         self.car.draw()
-        self.line_detector_left.draw()
-        self.line_detector_right.draw()
+        self.line_detectors.draw()
 
     def update(self, dt):
         self.car.handleKeys()
         self.car.update(dt)
-        self.line_detector_left.update(dt, self.car.sprite)
-        self.line_detector_right.update(dt, self.car.sprite)
+        self.line_detectors.update(dt)
+
+        print(self.line_detectors.getData())
 
 if __name__ == "__main__":
     window = Window(WINDOW_WIDTH, WINDOW_HEIGHT, TITLE)
