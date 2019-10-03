@@ -96,7 +96,7 @@ class LineDetectors:
         output_data = []
 
         for sprite in self.detector_sprites:
-            data = background_data[int(sprite.y), int(sprite.x)]
+            data = background_data[600 - int(sprite.y), int(sprite.x)]
             output_data.append(data)
 
         return np.array(output_data)
