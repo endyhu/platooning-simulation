@@ -42,6 +42,9 @@ class Object:
 class CarObject(Object):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.pos_x = self.sprite.x
+        self.pos_y = self.sprite.y
+
         self.acceleration = 0.0
         self.steering = 0
         self.velocity = 0.0
@@ -51,6 +54,13 @@ class CarObject(Object):
         self.max_acceleration = 20.0
         self.max_velocity = 40.0
         self.max_angular_velocity = 10
+
+    def reset(self):
+        self.sprite.x = self.pos_x
+        self.sprite.y = self.pos_y
+        self.sprite.rotation = 0.0
+        self.acceleration = 0.0
+        self.velocity = 0.0
 
     def handleKeys(self):
         self.acceleration = 0.0
@@ -92,13 +102,21 @@ class LineDetectors:
             for _ in range(2):
                 self.detector_sprites.append(pg.sprite.Sprite(sensor_img, 0, 0, batch=self.sprite_batch))
 
-    def getData(self):
+    def getData(self, is_bool=False):
         output_data = []
+        output_data_bool = []
 
         for sprite in self.detector_sprites:
             data = background_data[600 - int(sprite.y), int(sprite.x)]
-            output_data.append(data)
+            data_bool = 0
+            if np.sum(data) > 384:
+                data_bool = 1
 
+            output_data.append(data)
+            output_data_bool.append(data_bool)
+
+        if is_bool:
+            return np.array(output_data_bool)
         return np.array(output_data)
 
     def draw(self):
@@ -129,6 +147,22 @@ class Window(pg.window.Window):
         self.car = CarObject(WINDOW_WIDTH/2, WINDOW_HEIGHT/2, car_img)
         self.line_detectors = LineDetectors(self.car, True)
 
+    def getState(self):
+        velocity = self.car.velocity
+        acceleration = self.car.acceleration
+        line0, line1 = self.line_detectors.getData(True)
+
+        return [velocity, acceleration, line0, line1]
+
+    def reset(self):
+        self.car.reset()
+
+        return self.getState()
+
+    def on_key_press(self, symbol, modifier):
+        if symbol == key.R:
+            state = self.reset()
+
     def on_draw(self):
         self.clear()
         self.background.draw()
@@ -140,7 +174,7 @@ class Window(pg.window.Window):
         self.car.update(dt)
         self.line_detectors.update(dt)
 
-        print(self.line_detectors.getData())
+        print(self.getState())
 
 if __name__ == "__main__":
     window = Window(WINDOW_WIDTH, WINDOW_HEIGHT, TITLE)
