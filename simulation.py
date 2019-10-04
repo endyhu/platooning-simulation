@@ -62,6 +62,24 @@ class CarObject(Object):
         self.acceleration = 0.0
         self.velocity = 0.0
 
+    def step(self, action):
+        self.acceleration = 0.0
+        self.steering = 0
+        if action == 1:
+            self.acceleration = self.max_acceleration
+        elif action == 2:
+            self.steering = -1
+        elif action == 3:
+            self.acceleration = -self.max_acceleration
+        elif action == 4:
+            self.steering = 1
+        elif action == 5:
+            self.acceleration = self.max_acceleration
+            self.steering = -1
+        elif action == 6:
+            self.acceleration = self.max_acceleration
+            self.steering = 1
+
     def handleKeys(self):
         self.acceleration = 0.0
         self.steering = 0
@@ -109,7 +127,7 @@ class LineDetectors:
         for sprite in self.detector_sprites:
             data = background_data[600 - int(sprite.y), int(sprite.x)]
             data_bool = 0
-            if np.sum(data) > 384:
+            if np.sum(data) > 30:
                 data_bool = 1
 
             output_data.append(data)
@@ -148,20 +166,41 @@ class Window(pg.window.Window):
         self.line_detectors = LineDetectors(self.car, True)
 
     def getState(self):
-        velocity = self.car.velocity
         acceleration = self.car.acceleration
+        velocity = self.car.velocity
         line0, line1 = self.line_detectors.getData(True)
 
-        return [velocity, acceleration, line0, line1]
+        return [acceleration, velocity, line0, line1]
 
     def reset(self):
         self.car.reset()
 
         return self.getState()
 
+    def step(self, action):
+        self.car.step(action)
+        self.update(1/60)
+
+        state = self.getState()
+        reward = -0.1
+        done = False
+
+        if state[1] >= 30:
+            reward = 1.0
+        if state[2] or state[3]:
+            reward = -1.0
+        if state[2] and state[3]:
+            reward = -1.0
+            done = True
+
+        return state, reward, done, None
+
+    def on_mouse_scroll(self, x, y, scroll_x, scroll_y):
+        print(self.step(1))
+
     def on_key_press(self, symbol, modifier):
         if symbol == key.R:
-            state = self.reset()
+            self.reset()
 
     def on_draw(self):
         self.clear()
@@ -170,16 +209,14 @@ class Window(pg.window.Window):
         self.line_detectors.draw()
 
     def update(self, dt):
-        self.car.handleKeys()
+        # self.car.handleKeys()
         self.car.update(dt)
         self.line_detectors.update(dt)
-
-        print(self.getState())
 
 if __name__ == "__main__":
     window = Window(WINDOW_WIDTH, WINDOW_HEIGHT, TITLE)
     keys = key.KeyStateHandler()
     window.push_handlers(keys)
 
-    pg.clock.schedule_interval(window.update, window.frame_rate)
+    # pg.clock.schedule_interval(window.update, window.frame_rate)
     pg.app.run()
