@@ -1,8 +1,15 @@
 import cv2
+import time
+import h5py
+import random
 import numpy as np
 import pyglet as pg
+import tensorflow as tf
 
+from collections import deque
 from pyglet.window import key
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Activation
 
 DISPLAY = pg.canvas.get_display()
 SCREEN = DISPLAY.get_default_screen()
@@ -118,7 +125,7 @@ class LineDetectors:
 
         if show:
             for _ in range(2):
-                self.detector_sprites.append(pg.sprite.Sprite(sensor_img, 0, 0, batch=self.sprite_batch))
+                self.detector_sprites.append(pg.sprite.Sprite(sensor_img, self.car.sprite.x, self.car.sprite.y, batch=self.sprite_batch))
 
     def getData(self, is_bool=False):
         output_data = []
@@ -151,6 +158,88 @@ class LineDetectors:
             sprite.x = pos_x + offset_x
             sprite.y = pos_y + offset_y
 
+OBSERVATION_SPACE_N = 4
+ACTION_SPACE_N = 7
+
+class Estimator:
+    def __init__(self):
+        self.model = Sequential()
+        
+        self.model.add(Dense(16, input_shape=(OBSERVATION_SPACE_N,)))
+        self.model.add(Activation("relu"))
+        self.model.add(Dense(16))
+        self.model.add(Activation("relu"))
+        self.model.add(Dense(16))
+        self.model.add(Activation("relu"))
+        
+        self.model.add(Dense(ACTION_SPACE_N))
+        
+        self.optimizer = tf.keras.optimizers.Adam(lr=0.001)
+        self.model.compile(optimizer=self.optimizer, 
+                           loss="logcosh")
+        
+        self.model.summary()
+        
+        self.target_model = tf.keras.models.clone_model(self.model)
+        self.target_model.set_weights(self.model.get_weights())
+        
+    def preprocess(self, state):
+        return state.reshape(-1, OBSERVATION_SPACE_N)
+    
+    def predict(self, state):
+        state = self.preprocess(state)
+        prediction = self.model.predict(state)
+        
+        return prediction
+    
+    def update(self, s, a, y):
+        state = self.preprocess(s)
+        
+        td_target = self.predict(s)
+        td_target[0][a] = y
+        
+        self.model.train_on_batch(state, td_target)
+        
+    def predictTarget(self, state):
+        state = self.preprocess(state)
+        prediction = self.target_model.predict(state)
+        
+        return prediction
+        
+    def updateTarget(self):
+        self.target_model.set_weights(self.model.get_weights())
+    
+    def save(self, filename):
+        self.model.save(f"./models/{filename}.h5")
+        
+    def load(self, filename):
+        self.model.load_weights(f"./models/{filename}.h5")
+
+estimator = Estimator()
+
+MAX_STEPS = 100000
+MAX_EPISODE_STEPS = 9000
+
+DISCOUNT = 0.99
+BATCH_SIZE = 32
+
+EPSILON_INIT = 1.0
+EPSILON_MIN = 0.1
+EPSILON_END = 1
+
+REPLAY_MEMORY_SIZE = 100000
+REPLAY_START_SIZE = 50000
+
+UPDATE_FREQ = 4
+TARGET_NETWORK_UPDATE_FREQ = 10000
+
+def EpsilonGreedyPolicy(state, epsilon):
+    A = np.ones(ACTION_SPACE_N) * (epsilon / ACTION_SPACE_N)
+    best_action = np.argmax(estimator.predict(state))
+    A[best_action] = A[best_action] + (1 - epsilon)
+
+    return A
+
 class Window(pg.window.Window):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -166,11 +255,11 @@ class Window(pg.window.Window):
         self.line_detectors = LineDetectors(self.car, True)
 
     def getState(self):
-        acceleration = self.car.acceleration
-        velocity = self.car.velocity
+        acceleration = self.car.acceleration / self.car.max_acceleration
+        velocity = self.car.velocity / self.car.max_velocity
         line0, line1 = self.line_detectors.getData(True)
 
-        return [acceleration, velocity, line0, line1]
+        return np.array([acceleration, velocity, line0, line1])
 
     def reset(self):
         self.car.reset()
@@ -179,28 +268,109 @@ class Window(pg.window.Window):
 
     def step(self, action):
         self.car.step(action)
-        self.update(1/60)
+        self.update(1/30)
 
         state = self.getState()
-        reward = -0.1
+        reward = -1.0
         done = False
 
-        if state[1] >= 30:
+        if state[0]:
+            reward = 0.2
+        if state[1] >= 0.5:
             reward = 1.0
         if state[2] or state[3]:
-            reward = -1.0
+            reward = -0.8
         if state[2] and state[3]:
             reward = -1.0
             done = True
 
         return state, reward, done, None
 
+    def QLearning(self):
+        num_steps = 0
+        episode_rewards = []
+
+        epsilon = EPSILON_INIT
+        epsilon_gradient = (EPSILON_INIT - EPSILON_MIN) / EPSILON_END
+        
+        replay_memory = deque(maxlen=REPLAY_MEMORY_SIZE)
+
+        state = self.reset()
+        for _ in range(REPLAY_START_SIZE):
+            action_prob = EpsilonGreedyPolicy(state, epsilon)
+            action = np.random.choice([i for i in range(ACTION_SPACE_N)], p=action_prob)
+
+            next_state, reward, done, _ = self.step(action)
+
+            replay_memory.append((state, action, reward, next_state, done))
+            print(f"Replay Memory Start Size: ({len(replay_memory)}/{REPLAY_START_SIZE})")
+
+            if done:
+                state = self.reset()
+
+            state = next_state
+
+        while num_steps < MAX_STEPS:
+            state = self.reset()
+            episode_reward = 0
+
+            for _ in range(MAX_EPISODE_STEPS):
+                action_prob = EpsilonGreedyPolicy(state, epsilon)
+                action = np.random.choice([i for i in range(ACTION_SPACE_N)], p=action_prob)
+
+                next_state, reward, done, _ = self.step(action)
+
+                num_steps = num_steps + 1
+                episode_reward = episode_reward + reward
+                replay_memory.append((state, action, reward, next_state, done))
+
+                if epsilon > EPSILON_MIN:
+                    epsilon = epsilon - epsilon_gradient
+
+                if num_steps % UPDATE_FREQ == 0:
+                    replay_batch = random.sample(replay_memory, BATCH_SIZE)
+
+                    for ss, aa, rr, ns, terminal in replay_batch:
+                        td_target = rr
+
+                        if not terminal:
+                            best_next_action_value = np.argmax(estimator.predictTarget(ns))
+                            td_target = rr + DISCOUNT * best_next_action_value
+
+                        estimator.update(ss, aa, td_target)
+
+                if num_steps % TARGET_NETWORK_UPDATE_FREQ == 0:
+                    estimator.updateTarget()
+
+                if done:
+                    break
+
+                state = next_state
+
+            if len(episode_rewards) == 0 or episode_reward >= max(episode_rewards):
+                local_time = time.localtime()
+                estimator.save(f"{episode_reward:.2f}_{num_steps:>08}_{local_time.tm_mday:>02}_{local_time.tm_hour:>02}{local_time.tm_min:>02}")
+
+            episode_rewards.append(episode_reward)
+            print(f"[{len(episode_rewards)}] ({num_steps}/{MAX_STEPS}) Episode Reward: {episode_rewards[-1]:.5f} Epsilon: {epsilon}")
+
+        local_time = time.localtime()
+        filename = f"{episode_reward:.2f}_{num_steps:>08}_{local_time.tm_mday:>02}_{local_time.tm_hour:>02}{local_time.tm_min:>02}"
+        estimator.save(filename)
+        print("Model Saved")
+            
+        np.savetxt(f"./models/{filename}.csv", episode_rewards)
+        print("Episode Rewards Saved")
+
     def on_mouse_scroll(self, x, y, scroll_x, scroll_y):
-        print(self.step(1))
+        action = np.argmax(estimator.predict(self.getState()))
+        print(self.step(action))
 
     def on_key_press(self, symbol, modifier):
         if symbol == key.R:
             self.reset()
+        if symbol == key.ENTER:
+            self.QLearning()
 
     def on_draw(self):
         self.clear()
@@ -210,6 +380,8 @@ class Window(pg.window.Window):
 
     def update(self, dt):
         # self.car.handleKeys()
+        # action = np.argmax(estimator.predict(self.getState()))
+        # self.car.step(action)
         self.car.update(dt)
         self.line_detectors.update(dt)
 
