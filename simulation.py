@@ -1,6 +1,10 @@
 import cv2
 import numpy as np
 import pyglet as pg
+import ast
+import json
+import pickle as pkl
+import pandas as pd
 
 from pyglet.window import key
 
@@ -125,7 +129,10 @@ class Window(pg.window.Window):
         self.set_location(location_x, location_y)
 
         self.background = pg.sprite.Sprite(background_img, x=0, y=0)
-        
+        self.record_data = [np.zeros(shape=(2, 3), dtype='uint8')]
+        self.key_input = []
+        self.record_velocity = []
+
         self.car = CarObject(WINDOW_WIDTH/2, WINDOW_HEIGHT/2, car_img)
         self.line_detectors = LineDetectors(self.car, True)
 
@@ -135,12 +142,29 @@ class Window(pg.window.Window):
         self.car.draw()
         self.line_detectors.draw()
 
+    def handleKeys(self):
+        if keys[key.P]:
+            sensor = np.array(self.record_data)
+            velocity = np.array(self.record_velocity)
+
+            np.save('./supervised/data/sensor_data.npy', sensor)
+            np.save('./supervised/data/velocity_data.npy', velocity)
+
+            with open('./supervised/data/keys.json', 'w') as f:
+                json.dump(self.key_input, f)
+
     def update(self, dt):
+        self.handleKeys()
         self.car.handleKeys()
         self.car.update(dt)
         self.line_detectors.update(dt)
 
-        print(self.line_detectors.getData())
+        self.key_input.append(ast.literal_eval(str(keys)))
+        self.record_data.append(np.array(self.line_detectors.getData()))
+        self.record_velocity.append(self.car.velocity)
+
+        # print(self.line_detectors.getData().shape)
+
 
 if __name__ == "__main__":
     window = Window(WINDOW_WIDTH, WINDOW_HEIGHT, TITLE)
