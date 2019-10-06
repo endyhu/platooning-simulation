@@ -19,11 +19,11 @@ WINDOW_HEIGHT = 600
 
 TITLE = "Platooning Simulator"
 
-background_img = pg.image.load("./assets/map.png")
+background_img = pg.image.load("./assets/map1.png")
 car_img = pg.image.load("./assets/car.png")
 sensor_img = pg.image.load("./assets/sensor.png")
 
-background_data = cv2.imread("./assets/map.png")
+background_data = cv2.imread("./assets/map1.png")
 
 def centerImage(image):
     image.anchor_x = image.width // 2
@@ -59,7 +59,7 @@ class CarObject(Object):
         self.velocity_y = 0.0
 
         self.max_acceleration = 20.0
-        self.max_velocity = 40.0
+        self.max_velocity = 65.0
         self.max_angular_velocity = 10
 
     def reset(self):
@@ -158,18 +158,16 @@ class LineDetectors:
             sprite.x = pos_x + offset_x
             sprite.y = pos_y + offset_y
 
-OBSERVATION_SPACE_N = 4
+OBSERVATION_SPACE_N = 5
 ACTION_SPACE_N = 7
 
 class Estimator:
     def __init__(self):
         self.model = Sequential()
         
-        self.model.add(Dense(16, input_shape=(OBSERVATION_SPACE_N,)))
+        self.model.add(Dense(32, input_shape=(OBSERVATION_SPACE_N,)))
         self.model.add(Activation("relu"))
-        self.model.add(Dense(16))
-        self.model.add(Activation("relu"))
-        self.model.add(Dense(16))
+        self.model.add(Dense(64))
         self.model.add(Activation("relu"))
         
         self.model.add(Dense(ACTION_SPACE_N))
@@ -214,10 +212,12 @@ class Estimator:
         
     def load(self, filename):
         self.model.load_weights(f"./models/{filename}.h5")
+        self.updateTarget()
 
 estimator = Estimator()
+estimator.load("_705.76_00057137_06_1452")
 
-MAX_STEPS = 100000
+MAX_STEPS = 1000000
 MAX_EPISODE_STEPS = 9000
 
 DISCOUNT = 0.99
@@ -225,10 +225,10 @@ BATCH_SIZE = 32
 
 EPSILON_INIT = 1.0
 EPSILON_MIN = 0.1
-EPSILON_END = 1
+EPSILON_END = 10000
 
 REPLAY_MEMORY_SIZE = 100000
-REPLAY_START_SIZE = 50000
+REPLAY_START_SIZE = 10000
 
 UPDATE_FREQ = 4
 TARGET_NETWORK_UPDATE_FREQ = 10000
@@ -258,8 +258,9 @@ class Window(pg.window.Window):
         acceleration = self.car.acceleration / self.car.max_acceleration
         velocity = self.car.velocity / self.car.max_velocity
         line0, line1 = self.line_detectors.getData(True)
+        distance = 1.0
 
-        return np.array([acceleration, velocity, line0, line1])
+        return np.array([acceleration, velocity, line0, line1, distance])
 
     def reset(self):
         self.car.reset()
@@ -271,15 +272,15 @@ class Window(pg.window.Window):
         self.update(1/30)
 
         state = self.getState()
-        reward = -1.0
+        reward = -0.8
         done = False
 
-        if state[0]:
+        if state[0] >= 0.5:
             reward = 0.2
         if state[1] >= 0.5:
-            reward = 1.0
+            reward = state[1]
         if state[2] or state[3]:
-            reward = -0.8
+            reward = reward - 0.2
         if state[2] and state[3]:
             reward = -1.0
             done = True
@@ -380,8 +381,8 @@ class Window(pg.window.Window):
 
     def update(self, dt):
         # self.car.handleKeys()
-        # action = np.argmax(estimator.predict(self.getState()))
-        # self.car.step(action)
+        action = np.argmax(estimator.predict(self.getState()))
+        self.car.step(action)
         self.car.update(dt)
         self.line_detectors.update(dt)
 
@@ -390,5 +391,5 @@ if __name__ == "__main__":
     keys = key.KeyStateHandler()
     window.push_handlers(keys)
 
-    # pg.clock.schedule_interval(window.update, window.frame_rate)
+    pg.clock.schedule_interval(window.update, window.frame_rate)
     pg.app.run()

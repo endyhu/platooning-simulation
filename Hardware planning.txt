@@ -1,4 +1,0 @@
-Step 1 : import the car
-step 2 : import all needed sensors
-step 3 : make a working car with sensors
-step 4 : output all the data of the sensors
