@@ -163,7 +163,7 @@ class Window(pg.window.Window):
         self.record_data.append(np.array(self.line_detectors.getData()))
         self.record_velocity.append(self.car.velocity)
 
-        # print(self.line_detectors.getData().shape)
+        print(self.line_detectors.getData())
 
 
 if __name__ == "__main__":
