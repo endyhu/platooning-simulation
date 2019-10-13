@@ -35,22 +35,13 @@ def centerCarImage(image):
 
 centerCarImage(car_img)
 
-class Object:
+class CarObject:
     def __init__(self, pos_x, pos_y, image=None):
         if image is not None:
             self.sprite = pg.sprite.Sprite(image, pos_x, pos_y)
 
-    def draw(self):
-        self.sprite.draw()
-
-    def update(self, dt):
-        pass
-
-class CarObject(Object):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.pos_x = self.sprite.x
-        self.pos_y = self.sprite.y
+        self.pos_x = pos_x
+        self.pos_y = pos_y
 
         self.acceleration = 0.0
         self.steering = 0
@@ -61,6 +52,9 @@ class CarObject(Object):
         self.max_acceleration = 20.0
         self.max_velocity = 65.0
         self.max_angular_velocity = 10
+
+        self.sensor_line = SensorLine(self, True)
+        self.sensor_distance = SensorDistance(self, True)
 
     def reset(self):
         self.sprite.x = self.pos_x
@@ -99,6 +93,11 @@ class CarObject(Object):
         if keys[key.D]:
             self.steering = 1
 
+    def draw(self):
+        self.sprite.draw()
+        self.sensor_line.draw()
+        self.sensor_distance.draw()
+
     def update(self, dt):
         self.sprite.rotation = self.sprite.rotation + ((self.steering * 90) * dt)
 
@@ -117,7 +116,10 @@ class CarObject(Object):
         self.sprite.x = self.sprite.x + self.velocity_x * dt
         self.sprite.y = self.sprite.y + self.velocity_y * dt
 
-class LineDetectors:
+        self.sensor_line.update(dt)
+        self.sensor_distance.update(dt)
+
+class SensorLine:
     def __init__(self, car, show=False):
         self.car = car
         self.sprite_batch = pg.graphics.Batch()
@@ -157,6 +159,48 @@ class LineDetectors:
 
             sprite.x = pos_x + offset_x
             sprite.y = pos_y + offset_y
+
+class SensorDistance:
+    def __init__(self, car, show=False):
+        self.car = car
+        self.sprite = pg.sprite.Sprite(sensor_img, 0, 0)
+        self.max_angle = 15.0
+        self.max_distance = 100.0
+
+    def getData(self, cars):
+        angle = self.max_angle
+        distance = self.max_distance
+
+        b_x = self.sprite.x + np.cos(np.deg2rad(self.car.sprite.rotation))
+        b_y = self.sprite.y + -np.sin(np.deg2rad(self.car.sprite.rotation))
+        b = np.array([b_x, b_y])
+
+        for car in cars:
+            if car != self.car:
+                a = np.array([self.sprite.x, self.sprite.y])
+                c = np.array([car.sprite.x, car.sprite.y])
+
+                d = b - a
+                e = c - a
+
+                dm = (d[0]**2 + d[1]**2)**0.5
+                em = (e[0]**2 + e[1]**2)**0.5
+
+                car_angle = np.rad2deg(np.arccos(np.dot(d, e)/(dm * em)))
+                car_distance = abs(em - car.sprite.width / 3)
+
+                if car_angle <= self.max_angle and car_distance <= distance:
+                    angle = car_angle
+                    distance = car_distance
+
+        return np.array([angle, distance])
+
+    def draw(self):
+        self.sprite.draw()
+
+    def update(self, dt):
+        self.sprite.x = self.car.sprite.x + (self.car.sprite.width / 3 * 2) * np.cos(np.deg2rad(self.car.sprite.rotation))
+        self.sprite.y = self.car.sprite.y + (self.car.sprite.width / 3 * 2) * -np.sin(np.deg2rad(self.car.sprite.rotation))
 
 OBSERVATION_SPACE_N = 5
 ACTION_SPACE_N = 7
@@ -251,24 +295,25 @@ class Window(pg.window.Window):
 
         self.background = pg.sprite.Sprite(background_img, x=0, y=0)
         
-        self.car = CarObject(WINDOW_WIDTH/2, WINDOW_HEIGHT/2, car_img)
-        self.line_detectors = LineDetectors(self.car, True)
+        self.car0 = CarObject(WINDOW_WIDTH/2, WINDOW_HEIGHT/2, car_img)
+
+        self.cars = [self.car0]
 
     def getState(self):
-        acceleration = self.car.acceleration / self.car.max_acceleration
-        velocity = self.car.velocity / self.car.max_velocity
-        line0, line1 = self.line_detectors.getData(True)
+        acceleration = self.car0.acceleration / self.car0.max_acceleration
+        velocity = self.car0.velocity / self.car0.max_velocity
+        line0, line1 = self.car0.sensor_line.getData(True)
         distance = 1.0
 
         return np.array([acceleration, velocity, line0, line1, distance])
 
     def reset(self):
-        self.car.reset()
+        self.car0.reset()
 
         return self.getState()
 
     def step(self, action):
-        self.car.step(action)
+        self.car0.step(action)
         self.update(1/30)
 
         state = self.getState()
@@ -376,15 +421,14 @@ class Window(pg.window.Window):
     def on_draw(self):
         self.clear()
         self.background.draw()
-        self.car.draw()
-        self.line_detectors.draw()
+
+        self.car0.draw()
 
     def update(self, dt):
         # self.car.handleKeys()
         action = np.argmax(estimator.predict(self.getState()))
-        self.car.step(action)
-        self.car.update(dt)
-        self.line_detectors.update(dt)
+        self.car0.step(action)
+        self.car0.update(dt)
 
 if __name__ == "__main__":
     window = Window(WINDOW_WIDTH, WINDOW_HEIGHT, TITLE)
