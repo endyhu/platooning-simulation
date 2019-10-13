@@ -43,8 +43,8 @@ class CarObject:
         self.max_velocity = 40.0
         self.max_angular_velocity = 10
 
-        self.linedetectors = LineDetectors(self, True)
-        self.distancemodule = DistanceModule(self, True)
+        self.sensor_line = SensorLine(self, True)
+        self.sensor_distance = SensorDistance(self, True)
 
     def handleKeys(self):
         self.acceleration = 0.0
@@ -60,8 +60,8 @@ class CarObject:
 
     def draw(self):
         self.sprite.draw()
-        self.linedetectors.draw()
-        self.distancemodule.draw()
+        self.sensor_line.draw()
+        self.sensor_distance.draw()
 
     def update(self, dt):
         self.sprite.rotation = self.sprite.rotation + ((self.steering * 90) * dt)
@@ -81,10 +81,10 @@ class CarObject:
         self.sprite.x = self.sprite.x + self.velocity_x * dt
         self.sprite.y = self.sprite.y + self.velocity_y * dt
 
-        self.linedetectors.update(dt)
-        self.distancemodule.update(dt)
+        self.sensor_line.update(dt)
+        self.sensor_distance.update(dt)
 
-class LineDetectors:
+class SensorLine:
     def __init__(self, car, show=False):
         self.car = car
         self.sprite_batch = pg.graphics.Batch()
@@ -117,7 +117,7 @@ class LineDetectors:
             sprite.x = pos_x + offset_x
             sprite.y = pos_y + offset_y
 
-class DistanceModule:
+class SensorDistance:
     def __init__(self, car, show=False):
         self.car = car
         self.sprite = pg.sprite.Sprite(sensor_img, 0, 0)
@@ -188,7 +188,7 @@ class Window(pg.window.Window):
         for car in self.cars:
             car.update(dt)
 
-        print(self.car0.distancemodule.getData(self.cars))
+        print(self.car0.sensor_distance.getData(self.cars))
 
 if __name__ == "__main__":
     window = Window(WINDOW_WIDTH, WINDOW_HEIGHT, TITLE)
