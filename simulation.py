@@ -115,6 +115,48 @@ class LineDetectors:
             sprite.x = pos_x + offset_x
             sprite.y = pos_y + offset_y
 
+class DistanceModule:
+    def __init__(self, car, show=False):
+        self.car = car
+        self.sprite = pg.sprite.Sprite(sensor_img, 0, 0)
+        self.max_angle = 15.0
+        self.max_distance = 100.0
+
+    def getData(self, cars):
+        angle = self.max_angle
+        distance = self.max_distance
+
+        b_x = self.sprite.x + np.cos(np.deg2rad(self.car.sprite.rotation))
+        b_y = self.sprite.y + -np.sin(np.deg2rad(self.car.sprite.rotation))
+        b = np.array([b_x, b_y])
+
+        for car in cars:
+            if car != self.car:
+                a = np.array([self.sprite.x, self.sprite.y])
+                c = np.array([car.sprite.x, car.sprite.y])
+
+                d = b - a
+                e = c - a
+
+                dm = (d[0]**2 + d[1]**2)**0.5
+                em = (e[0]**2 + e[1]**2)**0.5
+
+                car_angle = np.rad2deg(np.arccos(np.dot(d, e)/(dm * em)))
+                car_distance = abs(em - car.sprite.width / 3)
+
+                if car_angle <= self.max_angle and car_distance <= distance:
+                    angle = car_angle
+                    distance = car_distance
+
+        return np.array([angle, distance])
+
+    def draw(self):
+        self.sprite.draw()
+
+    def update(self, dt):
+        self.sprite.x = self.car.sprite.x + (self.car.sprite.width / 3 * 2) * np.cos(np.deg2rad(self.car.sprite.rotation))
+        self.sprite.y = self.car.sprite.y + (self.car.sprite.width / 3 * 2) * -np.sin(np.deg2rad(self.car.sprite.rotation))
+
 class Window(pg.window.Window):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -126,21 +168,32 @@ class Window(pg.window.Window):
 
         self.background = pg.sprite.Sprite(background_img, x=0, y=0)
         
-        self.car = CarObject(WINDOW_WIDTH/2, WINDOW_HEIGHT/2, car_img)
-        self.line_detectors = LineDetectors(self.car, True)
+        self.car0 = CarObject(WINDOW_WIDTH/2, WINDOW_HEIGHT/2, car_img)
+        self.line_detectors = LineDetectors(self.car0, True)
+        self.distance_module = DistanceModule(self.car0, True)
+
+        self.car1 = CarObject(WINDOW_WIDTH/2 + 33, WINDOW_HEIGHT/2, car_img)
+
+        self.cars = [self.car0, self.car1]
 
     def on_draw(self):
         self.clear()
         self.background.draw()
-        self.car.draw()
+
+        self.car0.draw()
         self.line_detectors.draw()
+        self.distance_module.draw()
+        self.car1.draw()
 
     def update(self, dt):
-        self.car.handleKeys()
-        self.car.update(dt)
+        self.car0.handleKeys()
+        self.car0.update(dt)
         self.line_detectors.update(dt)
+        self.distance_module.update(dt)
 
-        print(self.line_detectors.getData())
+        print(self.distance_module.getData(self.cars))
+
+        self.car1.update(dt)
 
 if __name__ == "__main__":
     window = Window(WINDOW_WIDTH, WINDOW_HEIGHT, TITLE)
