@@ -28,20 +28,11 @@ def centerCarImage(image):
 
 centerCarImage(car_img)
 
-class Object:
+class CarObject:
     def __init__(self, pos_x, pos_y, image=None):
         if image is not None:
             self.sprite = pg.sprite.Sprite(image, pos_x, pos_y)
 
-    def draw(self):
-        self.sprite.draw()
-
-    def update(self, dt):
-        pass
-
-class CarObject(Object):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
         self.acceleration = 0.0
         self.steering = 0
         self.velocity = 0.0
@@ -51,6 +42,9 @@ class CarObject(Object):
         self.max_acceleration = 20.0
         self.max_velocity = 40.0
         self.max_angular_velocity = 10
+
+        self.linedetectors = LineDetectors(self, True)
+        self.distancemodule = DistanceModule(self, True)
 
     def handleKeys(self):
         self.acceleration = 0.0
@@ -63,6 +57,11 @@ class CarObject(Object):
             self.acceleration = -self.max_acceleration
         if keys[key.D]:
             self.steering = 1
+
+    def draw(self):
+        self.sprite.draw()
+        self.linedetectors.draw()
+        self.distancemodule.draw()
 
     def update(self, dt):
         self.sprite.rotation = self.sprite.rotation + ((self.steering * 90) * dt)
@@ -81,6 +80,9 @@ class CarObject(Object):
 
         self.sprite.x = self.sprite.x + self.velocity_x * dt
         self.sprite.y = self.sprite.y + self.velocity_y * dt
+
+        self.linedetectors.update(dt)
+        self.distancemodule.update(dt)
 
 class LineDetectors:
     def __init__(self, car, show=False):
@@ -169,9 +171,6 @@ class Window(pg.window.Window):
         self.background = pg.sprite.Sprite(background_img, x=0, y=0)
         
         self.car0 = CarObject(WINDOW_WIDTH/2, WINDOW_HEIGHT/2, car_img)
-        self.line_detectors = LineDetectors(self.car0, True)
-        self.distance_module = DistanceModule(self.car0, True)
-
         self.car1 = CarObject(WINDOW_WIDTH/2 + 33, WINDOW_HEIGHT/2, car_img)
 
         self.cars = [self.car0, self.car1]
@@ -180,20 +179,16 @@ class Window(pg.window.Window):
         self.clear()
         self.background.draw()
 
-        self.car0.draw()
-        self.line_detectors.draw()
-        self.distance_module.draw()
-        self.car1.draw()
+        for car in self.cars:
+            car.draw()
 
     def update(self, dt):
         self.car0.handleKeys()
-        self.car0.update(dt)
-        self.line_detectors.update(dt)
-        self.distance_module.update(dt)
+        
+        for car in self.cars:
+            car.update(dt)
 
-        print(self.distance_module.getData(self.cars))
-
-        self.car1.update(dt)
+        print(self.car0.distancemodule.getData(self.cars))
 
 if __name__ == "__main__":
     window = Window(WINDOW_WIDTH, WINDOW_HEIGHT, TITLE)
