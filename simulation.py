@@ -56,6 +56,14 @@ class CarObject:
         self.sensor_line = SensorLine(self, True)
         self.sensor_distance = SensorDistance(self, True)
 
+    def getState(self):
+        acceleration = self.acceleration / self.max_acceleration
+        velocity = self.velocity / self.max_velocity
+        line0, line1 = self.sensor_line.getData(True)
+        distance = 1.0
+
+        return np.array([acceleration, velocity, line0, line1, distance])
+
     def reset(self):
         self.sprite.x = self.pos_x
         self.sprite.y = self.pos_y
@@ -296,27 +304,21 @@ class Window(pg.window.Window):
         self.background = pg.sprite.Sprite(background_img, x=0, y=0)
         
         self.car0 = CarObject(WINDOW_WIDTH/2, WINDOW_HEIGHT/2, car_img)
+        # self.car1 = CarObject(WINDOW_WIDTH/2 + 33, WINDOW_HEIGHT/2, car_img)
 
         self.cars = [self.car0]
 
-    def getState(self):
-        acceleration = self.car0.acceleration / self.car0.max_acceleration
-        velocity = self.car0.velocity / self.car0.max_velocity
-        line0, line1 = self.car0.sensor_line.getData(True)
-        distance = 1.0
-
-        return np.array([acceleration, velocity, line0, line1, distance])
-
     def reset(self):
-        self.car0.reset()
+        for car in self.cars:
+            car.reset()
 
-        return self.getState()
+        return self.car0.getState()
 
     def step(self, action):
         self.car0.step(action)
         self.update(1/30)
 
-        state = self.getState()
+        state = self.car0.getState()
         reward = -0.8
         done = False
 
@@ -409,7 +411,7 @@ class Window(pg.window.Window):
         print("Episode Rewards Saved")
 
     def on_mouse_scroll(self, x, y, scroll_x, scroll_y):
-        action = np.argmax(estimator.predict(self.getState()))
+        action = np.argmax(estimator.predict(self.car0.getState()))
         print(self.step(action))
 
     def on_key_press(self, symbol, modifier):
@@ -422,13 +424,16 @@ class Window(pg.window.Window):
         self.clear()
         self.background.draw()
 
-        self.car0.draw()
+        for car in self.cars:
+            car.draw()
 
     def update(self, dt):
         # self.car.handleKeys()
-        action = np.argmax(estimator.predict(self.getState()))
+        action = np.argmax(estimator.predict(self.car0.getState()))
         self.car0.step(action)
-        self.car0.update(dt)
+
+        for car in self.cars:
+            car.update(dt)
 
 if __name__ == "__main__":
     window = Window(WINDOW_WIDTH, WINDOW_HEIGHT, TITLE)
