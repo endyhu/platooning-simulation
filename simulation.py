@@ -129,9 +129,9 @@ class Window(pg.window.Window):
         self.set_location(location_x, location_y)
 
         self.background = pg.sprite.Sprite(background_img, x=0, y=0)
-        self.record_data = [np.zeros(shape=(2, 3), dtype='uint8')]
-        self.key_input = []
-        self.record_velocity = []
+        self.record_sensordata = [np.zeros(shape=(2, 3), dtype='uint8')]
+        self.input_keys = []
+        self.record_cardata = []
 
         self.car = CarObject(WINDOW_WIDTH/2, WINDOW_HEIGHT/2, car_img)
         self.line_detectors = LineDetectors(self.car, True)
@@ -144,14 +144,14 @@ class Window(pg.window.Window):
 
     def handleKeys(self):
         if keys[key.P]:
-            sensor = np.array(self.record_data)
-            velocity = np.array(self.record_velocity)
+            sensor = np.array(self.record_sensordata)
+            cardata = np.array(self.record_cardata)
 
             np.save('./supervised/data/sensor_data.npy', sensor)
-            np.save('./supervised/data/velocity_data.npy', velocity)
+            np.save('./supervised/data/car_data.npy', cardata)
 
-            with open('./supervised/data/keys.json', 'w') as f:
-                json.dump(self.key_input, f)
+            with open('./supervised/data/input_keys.json', 'w') as f:
+                json.dump(self.input_keys, f)
 
     def update(self, dt):
         self.handleKeys()
@@ -159,11 +159,16 @@ class Window(pg.window.Window):
         self.car.update(dt)
         self.line_detectors.update(dt)
 
-        self.key_input.append(ast.literal_eval(str(keys)))
-        self.record_data.append(np.array(self.line_detectors.getData()))
-        self.record_velocity.append(self.car.velocity)
+        self.input_keys.append(ast.literal_eval(str(keys)))
+        self.record_sensordata.append(np.array(self.line_detectors.getData()))
+        self.record_cardata.append(np.array([self.car.steering,
+                                   self.car.velocity,
+                                   self.car.velocity_x,
+                                   self.car.velocity_y]))
 
-        print(self.line_detectors.getData())
+        # print(self.line_detectors.getData())
+
+        print(f'vel_Y: {self.car.steering}')
 
 
 if __name__ == "__main__":
