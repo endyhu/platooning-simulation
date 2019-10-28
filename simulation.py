@@ -3,8 +3,7 @@ import numpy as np
 import pyglet as pg
 import ast
 import json
-import pickle as pkl
-import pandas as pd
+import keras as krs
 
 from pyglet.window import key
 
@@ -22,15 +21,21 @@ sensor_img = pg.image.load("./assets/sensor.png")
 
 background_data = cv2.imread("./assets/map.png")
 
+model = krs.models.load_model('./supervised/models/temp1.hdf5')
+
+
 def centerImage(image):
     image.anchor_x = image.width // 2
     image.anchor_y = image.height // 2
+
 
 def centerCarImage(image):
     image.anchor_x = image.width // 3
     image.anchor_y = image.height // 2
 
+
 centerCarImage(car_img)
+
 
 class Object:
     def __init__(self, pos_x, pos_y, image=None):
@@ -42,6 +47,7 @@ class Object:
 
     def update(self, dt):
         pass
+
 
 class CarObject(Object):
     def __init__(self, *args, **kwargs):
@@ -55,6 +61,29 @@ class CarObject(Object):
         self.max_acceleration = 20.0
         self.max_velocity = 40.0
         self.max_angular_velocity = 10
+
+    def step(self, action):
+        self.acceleration = 0.0
+        self.steering = 0
+        if (action == [1, 0, 0]).all():
+            self.acceleration = self.max_acceleration
+            # print('F')
+        elif (action == [0, 1, 0]).all():
+            self.steering = -1
+            print('L')
+        elif (action == [0, 0, 0]).all():
+            self.acceleration = self.max_acceleration
+        elif (action == [0, 0, 1]).all():
+            print('R')
+            self.steering = 1
+        elif (action == [1, 0, 0]).all():
+            print('FL')
+            self.acceleration = self.max_acceleration
+            self.steering = -1
+        elif (action == [1, 0, 1]).all():
+            # print('FR')
+            self.acceleration = self.max_acceleration
+            self.steering = 1
 
     def handleKeys(self):
         self.acceleration = 0.0
@@ -132,6 +161,7 @@ class Window(pg.window.Window):
         self.record_sensordata = [np.zeros(shape=(2, 3), dtype='uint8')]
         self.input_keys = []
         self.record_cardata = []
+        self.test_record = []
 
         self.car = CarObject(WINDOW_WIDTH/2, WINDOW_HEIGHT/2, car_img)
         self.line_detectors = LineDetectors(self.car, True)
@@ -152,23 +182,53 @@ class Window(pg.window.Window):
 
             with open('./supervised/data/input_keys.json', 'w') as f:
                 json.dump(self.input_keys, f)
+        if keys[key.L]:
+            test_rec = np.array(self.test_record)
+            np.save('./supervised/data/test_record.npy', test_rec)
+
+    def sensor_preprocess(self, data):
+        if np.array_equal(data, [[0, 0, 0], [0, 0, 0]]):
+            res = [1, 0, 0, 0, 0]  # R-R
+        elif np.array_equal(data, [[0, 0, 0], [254, 254, 254]]) or np.array_equal(data, [[0, 0, 0], [255, 255, 255]]) or np.array_equal(data, [[0, 0, 0], [254, 255, 254]]):
+            res = [0, 1, 0, 0, 0]  # R-L
+        elif np.array_equal(data, [[0, 0, 0], [0, 188, 0]]):
+            res = [0, 0, 1, 0, 0]  # R-G
+        elif np.array_equal(data, [[254, 254, 254], [0, 0, 0]]) or np.array_equal(data, [[255, 255, 255], [0, 0, 0]]) or np.array_equal(data, [[254, 255, 254], [0, 0, 0]]):
+            res = [0, 0, 0, 1, 0]  # R-G#L-R
+        elif np.array_equal(data, [[0, 188, 0], [0, 0, 0]]):
+            res = [0, 0, 0, 0, 1]  # G-R
+        else:
+            res = [0, 0, 0, 0, 0]
+
+        return res
 
     def update(self, dt):
         self.handleKeys()
-        self.car.handleKeys()
+        # self.car.handleKeys()
         self.car.update(dt)
         self.line_detectors.update(dt)
 
-        self.input_keys.append(ast.literal_eval(str(keys)))
-        self.record_sensordata.append(np.array(self.line_detectors.getData()))
-        self.record_cardata.append(np.array([self.car.steering,
-                                   self.car.velocity,
-                                   self.car.velocity_x,
-                                   self.car.velocity_y]))
+        # self.input_keys.append(ast.literal_eval(str(keys)))
+        # self.record_sensordata.append(np.array(self.line_detectors.getData()))
+        # self.record_cardata.append(np.array([self.car.steering,
+        #                            self.car.velocity,
+        #                            self.car.velocity_x,
+        #                            self.car.velocity_y]))
+
+
+        # predict data
+        prs_sensor = self.sensor_preprocess(self.line_detectors.getData())
+        prs_sensor.extend([self.car.steering, self.car.velocity, self.car.velocity_x, self.car.velocity_y])
+        self.car.step(np.round(model.predict(np.array([prs_sensor]))))
+
+        # print(np.round(model.predict(np.array([prs_sensor])), 2))
+        print(self.car.velocity_x, self.car.velocity_y, self.car.steering)
+
+        self.test_record.append(np.array(prs_sensor))
 
         # print(self.line_detectors.getData())
 
-        print(f'vel_Y: {self.car.steering}')
+
 
 
 if __name__ == "__main__":
