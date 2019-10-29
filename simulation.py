@@ -21,7 +21,7 @@ sensor_img = pg.image.load("./assets/sensor.png")
 
 background_data = cv2.imread("./assets/map.png")
 
-model = krs.models.load_model('./supervised/models/temp1.hdf5')
+model = krs.models.load_model('./supervised/models/car_ai.hdf5')
 
 
 def centerImage(image):
@@ -221,8 +221,8 @@ class Window(pg.window.Window):
         prs_sensor.extend([self.car.steering, self.car.velocity, self.car.velocity_x, self.car.velocity_y])
         self.car.step(np.round(model.predict(np.array([prs_sensor]))))
 
-        # print(np.round(model.predict(np.array([prs_sensor])), 2))
-        print(self.car.velocity_x, self.car.velocity_y, self.car.steering)
+        print(np.round(model.predict(np.array([prs_sensor])), 2))
+        #print(self.car.velocity_x, self.car.velocity_y, self.car.steering)
 
         self.test_record.append(np.array(prs_sensor))
 
