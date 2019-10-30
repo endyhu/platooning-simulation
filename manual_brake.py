@@ -310,7 +310,11 @@ class Window(pg.window.Window):
 
         self.background = pg.sprite.Sprite(background_img, x=0, y=0)
         
-        self.car0 = CarObject(WINDOW_WIDTH/2, WINDOW_HEIGHT/2, car_img)
+        self.car0 = CarObject(500, WINDOW_HEIGHT/2, car_img)
+        self.car1 = CarObject(500 - 33 * 1, WINDOW_HEIGHT/2, car_img)
+        self.car2 = CarObject(500 - 33 * 2, WINDOW_HEIGHT/2, car_img)
+        self.car3 = CarObject(500 - 33 * 3, WINDOW_HEIGHT/2, car_img)
+        self.car4 = CarObject(500 - 33 * 4, WINDOW_HEIGHT/2, car_img)
 
         self.obs_idx = np.random.randint(0, 9)
         self.obs_counter = 0
@@ -328,7 +332,7 @@ class Window(pg.window.Window):
         self.car_obs = CarObject(self.obs_data[self.obs_idx][0], self.obs_data[self.obs_idx][1], car_img)
         self.car_obs.sprite.rotation = self.obs_data[self.obs_idx][2]
 
-        self.cars = [self.car0, self.car_obs]
+        self.cars = [self.car0, self.car1, self.car2, self.car3, self.car4, self.car_obs]
 
     def reset(self):
         for car in self.cars:
@@ -366,14 +370,15 @@ class Window(pg.window.Window):
         return state, reward, done, None
 
     def continuousStep(self):
-        state = self.car0.getState(self.cars)
-        action = np.argmax(estimator.predict(state))
-        state = self.car0.getState(self.cars)
-        self.car0.step(action, (state[4] * 100))
+        for car in self.cars[:-1]:
+            state = car.getState(self.cars)
+            action = np.argmax(estimator.predict(state))
+            state = car.getState(self.cars)
+            car.step(action, (state[4] * 100))
 
-    def on_mouse_scroll(self, x, y, scroll_x, scroll_y):
-        action = np.argmax(estimator.predict(self.car0.getState(self.cars)))
-        print(self.step(action))
+    # def on_mouse_scroll(self, x, y, scroll_x, scroll_y):
+    #     action = np.argmax(estimator.predict(self.car0.getState(self.cars)))
+    #     print(self.step(action))
 
     def on_key_press(self, symbol, modifier):
         if symbol == key.R:
@@ -389,9 +394,9 @@ class Window(pg.window.Window):
             car.draw()
 
     def updateObs(self):
-        if self.car0.sensor_distance.getData(self.cars) < 50.0:
+        if self.car0.sensor_distance.getData(self.cars) < 33.0:
             self.obs_counter = self.obs_counter + 1
-            if self.obs_counter > 150:
+            if self.obs_counter > 300:
                 self.obs_idx = np.random.randint(0, 9)
                 self.car_obs.sprite.x = self.obs_data[self.obs_idx][0]
                 self.car_obs.sprite.y = self.obs_data[self.obs_idx][1]
