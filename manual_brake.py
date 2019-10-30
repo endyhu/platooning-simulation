@@ -19,11 +19,11 @@ WINDOW_HEIGHT = 600
 
 TITLE = "Platooning Simulator"
 
-background_img = pg.image.load("./assets/map1.png")
+background_img = pg.image.load("./assets/map2.png")
 car_img = pg.image.load("./assets/car.png")
 sensor_img = pg.image.load("./assets/sensor.png")
 
-background_data = cv2.imread("./assets/map1.png")
+background_data = cv2.imread("./assets/map2.png")
 
 def centerImage(image):
     image.anchor_x = image.width // 2
@@ -56,11 +56,11 @@ class CarObject:
         self.sensor_line = SensorLine(self, True)
         self.sensor_distance = SensorDistance(self, True)
 
-    def getState(self):
+    def getState(self, cars):
         acceleration = self.acceleration / self.max_acceleration
         velocity = self.velocity / self.max_velocity
         line0, line1 = self.sensor_line.getData(True)
-        distance = 1.0
+        distance = self.sensor_distance.getData(cars) / self.sensor_distance.max_distance
 
         return np.array([acceleration, velocity, line0, line1, distance])
 
@@ -71,7 +71,7 @@ class CarObject:
         self.acceleration = 0.0
         self.velocity = 0.0
 
-    def step(self, action):
+    def step(self, action, distance):
         self.acceleration = 0.0
         self.steering = 0
         if action == 1:
@@ -88,6 +88,10 @@ class CarObject:
         elif action == 6:
             self.acceleration = self.max_acceleration
             self.steering = 1
+
+        brake_distance = (self.velocity**2) / (2 * self.max_acceleration)
+        if (distance - 12.0) <= brake_distance:
+            self.acceleration = -self.max_acceleration
 
     def handleKeys(self):
         self.acceleration = 0.0
@@ -172,7 +176,7 @@ class SensorDistance:
     def __init__(self, car, show=False):
         self.car = car
         self.sprite = pg.sprite.Sprite(sensor_img, 0, 0)
-        self.max_angle = 15.0
+        self.max_angle = 360.0
         self.max_distance = 100.0
 
     def getData(self, cars):
@@ -201,7 +205,7 @@ class SensorDistance:
                     angle = car_angle
                     distance = car_distance
 
-        return np.array([angle, distance])
+        return distance
 
     def draw(self):
         self.sprite.draw()
@@ -219,12 +223,14 @@ class Estimator:
         
         self.model.add(Dense(32, input_shape=(OBSERVATION_SPACE_N,)))
         self.model.add(Activation("relu"))
+        # self.model.add(Dense(32))
+        # self.model.add(Activation("relu"))
         self.model.add(Dense(64))
         self.model.add(Activation("relu"))
         
         self.model.add(Dense(ACTION_SPACE_N))
         
-        self.optimizer = tf.keras.optimizers.Adam(lr=0.001)
+        self.optimizer = tf.keras.optimizers.Adam(lr=0.0001)
         self.model.compile(optimizer=self.optimizer, 
                            loss="logcosh")
         
@@ -234,6 +240,7 @@ class Estimator:
         self.target_model.set_weights(self.model.get_weights())
         
     def preprocess(self, state):
+        state[4] = 1.0
         return state.reshape(-1, OBSERVATION_SPACE_N)
     
     def predict(self, state):
@@ -270,17 +277,17 @@ estimator = Estimator()
 estimator.load("_705.76_00057137_06_1452")
 
 MAX_STEPS = 1000000
-MAX_EPISODE_STEPS = 9000
+MAX_EPISODE_STEPS = 1000
 
 DISCOUNT = 0.99
 BATCH_SIZE = 32
 
 EPSILON_INIT = 1.0
 EPSILON_MIN = 0.1
-EPSILON_END = 10000
+EPSILON_END = 100000
 
 REPLAY_MEMORY_SIZE = 100000
-REPLAY_START_SIZE = 10000
+REPLAY_START_SIZE = 50000
 
 UPDATE_FREQ = 4
 TARGET_NETWORK_UPDATE_FREQ = 10000
@@ -304,121 +311,75 @@ class Window(pg.window.Window):
         self.background = pg.sprite.Sprite(background_img, x=0, y=0)
         
         self.car0 = CarObject(WINDOW_WIDTH/2, WINDOW_HEIGHT/2, car_img)
-        # self.car1 = CarObject(WINDOW_WIDTH/2 + 33, WINDOW_HEIGHT/2, car_img)
 
-        self.cars = [self.car0]
+        self.obs_idx = np.random.randint(0, 9)
+        self.obs_counter = 0
+        self.obs_data = [
+            [594.89463, 185.91862,   91.06800],
+            [688.71395,  41.85971,    0.32730],
+            [735.40366, 413.63733,  -90.47457],
+            [651.71919, 526.01366, -175.59751],
+            [314.79445, 496.40442, -185.99217],
+            [109.75403, 288.53455, -274.26786],
+            [111.37117,  37.04259, -323.63017],
+            [246.56537, 281.18256, -409.39490],
+            [469.66971, 297.85476, -359.16123]]
+
+        self.car_obs = CarObject(self.obs_data[self.obs_idx][0], self.obs_data[self.obs_idx][1], car_img)
+        self.car_obs.sprite.rotation = self.obs_data[self.obs_idx][2]
+
+        self.cars = [self.car0, self.car_obs]
 
     def reset(self):
         for car in self.cars:
             car.reset()
 
-        return self.car0.getState()
+        self.obs_idx = np.random.randint(0, 9)
+        self.obs_counter = 0
+        self.car_obs.sprite.x = self.obs_data[self.obs_idx][0]
+        self.car_obs.sprite.y = self.obs_data[self.obs_idx][1]
+        self.car_obs.sprite.rotation = self.obs_data[self.obs_idx][2]
+
+        return self.car0.getState(self.cars)
 
     def step(self, action):
-        self.car0.step(action)
+        state = self.car0.getState(self.cars)
+
+        self.car0.step(action, (state[4] * 100))
         self.update(1/30)
 
-        state = self.car0.getState()
-        reward = -0.8
+        state = self.car0.getState(self.cars)
+        reward = 0.0
         done = False
-
-        if state[0] >= 0.5:
-            reward = 0.2
-        if state[1] >= 0.5:
+        
+        if state[1] > 0.2:
             reward = state[1]
-        if state[2] or state[3]:
-            reward = reward - 0.2
+        if state[4] < (14.0 / self.car0.sensor_distance.max_distance):
+            reward = 1.0
         if state[2] and state[3]:
+            reward = -1.0
+            done = True
+        if state[4] < (8.0 / self.car0.sensor_distance.max_distance):
             reward = -1.0
             done = True
 
         return state, reward, done, None
 
-    def QLearning(self):
-        num_steps = 0
-        episode_rewards = []
-
-        epsilon = EPSILON_INIT
-        epsilon_gradient = (EPSILON_INIT - EPSILON_MIN) / EPSILON_END
-        
-        replay_memory = deque(maxlen=REPLAY_MEMORY_SIZE)
-
-        state = self.reset()
-        for _ in range(REPLAY_START_SIZE):
-            action_prob = EpsilonGreedyPolicy(state, epsilon)
-            action = np.random.choice([i for i in range(ACTION_SPACE_N)], p=action_prob)
-
-            next_state, reward, done, _ = self.step(action)
-
-            replay_memory.append((state, action, reward, next_state, done))
-            print(f"Replay Memory Start Size: ({len(replay_memory)}/{REPLAY_START_SIZE})")
-
-            if done:
-                state = self.reset()
-
-            state = next_state
-
-        while num_steps < MAX_STEPS:
-            state = self.reset()
-            episode_reward = 0
-
-            for _ in range(MAX_EPISODE_STEPS):
-                action_prob = EpsilonGreedyPolicy(state, epsilon)
-                action = np.random.choice([i for i in range(ACTION_SPACE_N)], p=action_prob)
-
-                next_state, reward, done, _ = self.step(action)
-
-                num_steps = num_steps + 1
-                episode_reward = episode_reward + reward
-                replay_memory.append((state, action, reward, next_state, done))
-
-                if epsilon > EPSILON_MIN:
-                    epsilon = epsilon - epsilon_gradient
-
-                if num_steps % UPDATE_FREQ == 0:
-                    replay_batch = random.sample(replay_memory, BATCH_SIZE)
-
-                    for ss, aa, rr, ns, terminal in replay_batch:
-                        td_target = rr
-
-                        if not terminal:
-                            best_next_action_value = np.argmax(estimator.predictTarget(ns))
-                            td_target = rr + DISCOUNT * best_next_action_value
-
-                        estimator.update(ss, aa, td_target)
-
-                if num_steps % TARGET_NETWORK_UPDATE_FREQ == 0:
-                    estimator.updateTarget()
-
-                if done:
-                    break
-
-                state = next_state
-
-            if len(episode_rewards) == 0 or episode_reward >= max(episode_rewards):
-                local_time = time.localtime()
-                estimator.save(f"{episode_reward:.2f}_{num_steps:>08}_{local_time.tm_mday:>02}_{local_time.tm_hour:>02}{local_time.tm_min:>02}")
-
-            episode_rewards.append(episode_reward)
-            print(f"[{len(episode_rewards)}] ({num_steps}/{MAX_STEPS}) Episode Reward: {episode_rewards[-1]:.5f} Epsilon: {epsilon}")
-
-        local_time = time.localtime()
-        filename = f"{episode_reward:.2f}_{num_steps:>08}_{local_time.tm_mday:>02}_{local_time.tm_hour:>02}{local_time.tm_min:>02}"
-        estimator.save(filename)
-        print("Model Saved")
-            
-        np.savetxt(f"./models/{filename}.csv", episode_rewards)
-        print("Episode Rewards Saved")
+    def continuousStep(self):
+        state = self.car0.getState(self.cars)
+        action = np.argmax(estimator.predict(state))
+        state = self.car0.getState(self.cars)
+        self.car0.step(action, (state[4] * 100))
 
     def on_mouse_scroll(self, x, y, scroll_x, scroll_y):
-        action = np.argmax(estimator.predict(self.car0.getState()))
+        action = np.argmax(estimator.predict(self.car0.getState(self.cars)))
         print(self.step(action))
 
     def on_key_press(self, symbol, modifier):
         if symbol == key.R:
             self.reset()
-        if symbol == key.ENTER:
-            self.QLearning()
+        if symbol == key.SPACE:
+            print(f"{self.car0.sprite.x:.05f}, {self.car0.sprite.y:.05f}, {self.car0.sprite.rotation:.05f}")
 
     def on_draw(self):
         self.clear()
@@ -427,13 +388,25 @@ class Window(pg.window.Window):
         for car in self.cars:
             car.draw()
 
+    def updateObs(self):
+        if self.car0.sensor_distance.getData(self.cars) < 50.0:
+            self.obs_counter = self.obs_counter + 1
+            if self.obs_counter > 150:
+                self.obs_idx = np.random.randint(0, 9)
+                self.car_obs.sprite.x = self.obs_data[self.obs_idx][0]
+                self.car_obs.sprite.y = self.obs_data[self.obs_idx][1]
+                self.car_obs.sprite.rotation = self.obs_data[self.obs_idx][2]
+                self.obs_counter = 0
+
     def update(self, dt):
-        # self.car.handleKeys()
-        action = np.argmax(estimator.predict(self.car0.getState()))
-        self.car0.step(action)
+        # self.car0.handleKeys()
+        self.continuousStep()
 
         for car in self.cars:
             car.update(dt)
+
+        self.updateObs()
+        # print(self.car0.sensor_distance.getData(self.cars))
 
 if __name__ == "__main__":
     window = Window(WINDOW_WIDTH, WINDOW_HEIGHT, TITLE)
