@@ -36,7 +36,7 @@ def centerCarImage(image):
 centerCarImage(car_img)
 
 class CarObject:
-    def __init__(self, pos_x, pos_y, max_velocity, optimal_distance, image=None):
+    def __init__(self, pos_x, pos_y, image=None):
         if image is not None:
             self.sprite = pg.sprite.Sprite(image, pos_x, pos_y)
 
@@ -56,8 +56,6 @@ class CarObject:
         self.sensor_line = SensorLine(self, True)
         self.sensor_distance = SensorDistance(self, True)
 
-        self.optimal_distance = optimal_distance
-
     def getState(self, cars):
         acceleration = self.acceleration / self.max_acceleration
         velocity = self.velocity / self.max_velocity
@@ -73,7 +71,7 @@ class CarObject:
         self.acceleration = 0.0
         self.velocity = 0.0
 
-    def step(self, action, distance):
+    def step(self, action):
         self.acceleration = 0.0
         self.steering = 0
         if action == 1:
@@ -90,10 +88,6 @@ class CarObject:
         elif action == 6:
             self.acceleration = self.max_acceleration
             self.steering = 1
-
-        brake_distance = (self.velocity**2) / (2 * self.max_acceleration)
-        if (distance - self.optimal_distance) <= brake_distance:
-            self.acceleration = -self.max_acceleration
 
     def handleKeys(self):
         self.acceleration = 0.0
@@ -178,7 +172,7 @@ class SensorDistance:
     def __init__(self, car, show=False):
         self.car = car
         self.sprite = pg.sprite.Sprite(sensor_img, 0, 0)
-        self.max_angle = 45.0
+        self.max_angle = 360.0
         self.max_distance = 100.0
 
     def getData(self, cars):
@@ -225,8 +219,8 @@ class Estimator:
         
         self.model.add(Dense(32, input_shape=(OBSERVATION_SPACE_N,)))
         self.model.add(Activation("relu"))
-        # self.model.add(Dense(32))
-        # self.model.add(Activation("relu"))
+        self.model.add(Dense(32))
+        self.model.add(Activation("relu"))
         self.model.add(Dense(64))
         self.model.add(Activation("relu"))
         
@@ -242,7 +236,6 @@ class Estimator:
         self.target_model.set_weights(self.model.get_weights())
         
     def preprocess(self, state):
-        state[4] = 1.0
         return state.reshape(-1, OBSERVATION_SPACE_N)
     
     def predict(self, state):
@@ -276,9 +269,9 @@ class Estimator:
         self.updateTarget()
 
 estimator = Estimator()
-estimator.load("_705.76_00057137_06_1452")
+estimator.load("321.00_00224496_28_2150")
 
-MAX_STEPS = 1000000
+MAX_STEPS = 2000000
 MAX_EPISODE_STEPS = 1000
 
 DISCOUNT = 0.99
@@ -304,7 +297,7 @@ def EpsilonGreedyPolicy(state, epsilon):
 class Window(pg.window.Window):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.frame_rate = 1/60.0
+        self.frame_rate = 1/30.0
 
         location_x = (SCREEN.width // 2) - (WINDOW_WIDTH // 2)
         location_y = (SCREEN.height // 2) - (WINDOW_HEIGHT // 2)
@@ -312,11 +305,7 @@ class Window(pg.window.Window):
 
         self.background = pg.sprite.Sprite(background_img, x=0, y=0)
         
-        self.car0 = CarObject(500, WINDOW_HEIGHT/2, 33.0, car_img)
-        self.car1 = CarObject(500 - 33 * 1, WINDOW_HEIGHT/2, 11.0, car_img)
-        self.car2 = CarObject(500 - 33 * 2, WINDOW_HEIGHT/2, 11.0, car_img)
-        self.car3 = CarObject(500 - 33 * 3, WINDOW_HEIGHT/2, 11.0, car_img)
-        self.car4 = CarObject(500 - 33 * 4, WINDOW_HEIGHT/2, 11.0, car_img)
+        self.car0 = CarObject(WINDOW_WIDTH/2, WINDOW_HEIGHT/2, car_img)
 
         self.obs_idx = np.random.randint(0, 9)
         self.obs_counter = 0
@@ -331,17 +320,16 @@ class Window(pg.window.Window):
             [246.56537, 281.18256, -409.39490],
             [469.66971, 297.85476, -359.16123]]
 
-        self.car_obs = CarObject(self.obs_data[self.obs_idx][0], self.obs_data[self.obs_idx][1], 33.0, car_img)
+        self.car_obs = CarObject(self.obs_data[self.obs_idx][0], self.obs_data[self.obs_idx][1], car_img)
         self.car_obs.sprite.rotation = self.obs_data[self.obs_idx][2]
 
-        self.cars = [self.car0, self.car1, self.car2, self.car3, self.car4, self.car_obs]
+        self.cars = [self.car0, self.car_obs]
 
     def reset(self):
         for car in self.cars:
             car.reset()
 
         self.obs_idx = np.random.randint(0, 9)
-        self.obs_counter = 0
         self.car_obs.sprite.x = self.obs_data[self.obs_idx][0]
         self.car_obs.sprite.y = self.obs_data[self.obs_idx][1]
         self.car_obs.sprite.rotation = self.obs_data[self.obs_idx][2]
@@ -349,9 +337,7 @@ class Window(pg.window.Window):
         return self.car0.getState(self.cars)
 
     def step(self, action):
-        state = self.car0.getState(self.cars)
-
-        self.car0.step(action, (state[4] * 100))
+        self.car0.step(action)
         self.update(1/30)
 
         state = self.car0.getState(self.cars)
@@ -371,20 +357,91 @@ class Window(pg.window.Window):
 
         return state, reward, done, None
 
-    def continuousStep(self):
-        for car in self.cars[:-1]:
-            state = car.getState(self.cars)
-            action = np.argmax(estimator.predict(state))
-            state = car.getState(self.cars)
-            car.step(action, (state[4] * 100))
+    def QLearning(self):
+        num_steps = 0
+        episode_rewards = []
 
-    # def on_mouse_scroll(self, x, y, scroll_x, scroll_y):
-    #     action = np.argmax(estimator.predict(self.car0.getState(self.cars)))
-    #     print(self.step(action))
+        epsilon = EPSILON_INIT
+        epsilon_gradient = (EPSILON_INIT - EPSILON_MIN) / EPSILON_END
+        
+        replay_memory = deque(maxlen=REPLAY_MEMORY_SIZE)
+
+        state = self.reset()
+        for _ in range(REPLAY_START_SIZE):
+            action_prob = EpsilonGreedyPolicy(state, epsilon)
+            action = np.random.choice([i for i in range(ACTION_SPACE_N)], p=action_prob)
+
+            next_state, reward, done, _ = self.step(action)
+
+            replay_memory.append((state, action, reward, next_state, done))
+            print(f"Replay Memory Start Size: ({len(replay_memory)}/{REPLAY_START_SIZE})")
+
+            if done:
+                state = self.reset()
+
+            state = next_state
+
+        while num_steps < MAX_STEPS:
+            state = self.reset()
+            episode_reward = 0
+
+            for _ in range(MAX_EPISODE_STEPS):
+                action_prob = EpsilonGreedyPolicy(state, epsilon)
+                action = np.random.choice([i for i in range(ACTION_SPACE_N)], p=action_prob)
+
+                next_state, reward, done, _ = self.step(action)
+
+                num_steps = num_steps + 1
+                episode_reward = episode_reward + reward
+                replay_memory.append((state, action, reward, next_state, done))
+
+                if epsilon > EPSILON_MIN:
+                    epsilon = epsilon - epsilon_gradient
+
+                if num_steps % UPDATE_FREQ == 0:
+                    replay_batch = random.sample(replay_memory, BATCH_SIZE)
+
+                    for ss, aa, rr, ns, terminal in replay_batch:
+                        td_target = rr
+
+                        if not terminal:
+                            best_next_action_value = np.argmax(estimator.predictTarget(ns))
+                            td_target = rr + DISCOUNT * best_next_action_value
+
+                        estimator.update(ss, aa, td_target)
+
+                if num_steps % TARGET_NETWORK_UPDATE_FREQ == 0:
+                    estimator.updateTarget()
+
+                if done:
+                    break
+
+                state = next_state
+
+            if len(episode_rewards) == 0 or episode_reward >= max(episode_rewards):
+                local_time = time.localtime()
+                estimator.save(f"{episode_reward:.2f}_{num_steps:>08}_{local_time.tm_mday:>02}_{local_time.tm_hour:>02}{local_time.tm_min:>02}")
+
+            episode_rewards.append(episode_reward)
+            print(f"[{len(episode_rewards)}] ({num_steps}/{MAX_STEPS}) Episode Reward: {episode_rewards[-1]:.5f} Epsilon: {epsilon}")
+
+        local_time = time.localtime()
+        filename = f"{episode_reward:.2f}_{num_steps:>08}_{local_time.tm_mday:>02}_{local_time.tm_hour:>02}{local_time.tm_min:>02}"
+        estimator.save(filename)
+        print("Model Saved")
+            
+        np.savetxt(f"./models/{filename}.csv", episode_rewards)
+        print("Episode Rewards Saved")
+
+    def on_mouse_scroll(self, x, y, scroll_x, scroll_y):
+        action = np.argmax(estimator.predict(self.car0.getState(self.cars)))
+        print(self.step(action))
 
     def on_key_press(self, symbol, modifier):
         if symbol == key.R:
             self.reset()
+        if symbol == key.ENTER:
+            self.QLearning()
         if symbol == key.SPACE:
             print(f"{self.car0.sprite.x:.05f}, {self.car0.sprite.y:.05f}, {self.car0.sprite.rotation:.05f}")
 
@@ -396,9 +453,9 @@ class Window(pg.window.Window):
             car.draw()
 
     def updateObs(self):
-        if self.car0.sensor_distance.getData(self.cars) < 33.0:
+        if self.car0.sensor_distance.getData(self.cars) < 20.0:
             self.obs_counter = self.obs_counter + 1
-            if self.obs_counter > 300:
+            if self.obs_counter > 150:
                 self.obs_idx = np.random.randint(0, 9)
                 self.car_obs.sprite.x = self.obs_data[self.obs_idx][0]
                 self.car_obs.sprite.y = self.obs_data[self.obs_idx][1]
@@ -407,7 +464,8 @@ class Window(pg.window.Window):
 
     def update(self, dt):
         # self.car0.handleKeys()
-        self.continuousStep()
+        # action = np.argmax(estimator.predict(self.car0.getState(self.cars)))
+        # self.car0.step(action)
 
         for car in self.cars:
             car.update(dt)
@@ -420,5 +478,5 @@ if __name__ == "__main__":
     keys = key.KeyStateHandler()
     window.push_handlers(keys)
 
-    pg.clock.schedule_interval(window.update, window.frame_rate)
+    # pg.clock.schedule_interval(window.update, window.frame_rate)
     pg.app.run()
