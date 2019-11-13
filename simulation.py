@@ -71,7 +71,7 @@ class SensorLine:
             sprite.y = pos_y + offset_y
 
 class SensorDistance:
-    def __init__(self, car, max_angle=180.0, max_distance=450.0, show=False):
+    def __init__(self, car, max_angle=90.0, max_distance=450.0, show=False):
         self.car = car
         self.sprite = pg.sprite.Sprite(sensor_img, 0, 0)
         self.max_angle = max_angle
@@ -180,6 +180,7 @@ class CarObject:
         distance = distance * self.sensor_distance.max_distance
 
         brake_distance = (self.velocity**2) / (2 * self.max_acceleration)
+        print(distance, brake_distance)
         if (distance - self.optimal_distance) <= brake_distance:
             self.acceleration = -self.max_acceleration
 
@@ -239,7 +240,7 @@ class ObstacleObject:
             [469.66971, 297.85476, -359.16123]]
 
         self.car = CarObject(0, 0, 33.0, image)
-        self.car.sensor_distance = SensorDistance(self.car, 360.0, 100.0, True)
+        self.car.sensor_distance = SensorDistance(self.car, 180.0, 100.0, True)
 
     def reset(self):
         self.idx = np.random.randint(0, len(self.data))
