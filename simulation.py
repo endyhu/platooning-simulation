@@ -180,7 +180,6 @@ class CarObject:
         distance = distance * self.sensor_distance.max_distance
 
         brake_distance = (self.velocity**2) / (2 * self.max_acceleration)
-        print(distance, brake_distance)
         if (distance - self.optimal_distance) <= brake_distance:
             self.acceleration = -self.max_acceleration
 

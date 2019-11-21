@@ -1,9 +1,11 @@
+import os
 import h5py
 import numpy as np
 import tensorflow as tf
 
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Activation
+os.environ["TF_CPP_MIN_LOG_LEVEL"]="2"
 
 OBSERVATION_SPACE_N = 5
 ACTION_SPACE_N = 7
