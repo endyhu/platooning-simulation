@@ -113,7 +113,7 @@ class SensorDistance:
         self.sprite.y = self.car.sprite.y + (self.car.sprite.width / 3 * 2) * -np.sin(np.deg2rad(self.car.sprite.rotation))
 
 class CarObject:
-    def __init__(self, pos_x, pos_y, optimal_distance=33.0, image=car1_img):
+    def __init__(self, pos_x, pos_y, optimal_distance=33.0, image=car1_img, platoon=None):
         self.sprite = pg.sprite.Sprite(image, pos_x, pos_y)
 
         self.pos_x = pos_x
@@ -129,6 +129,7 @@ class CarObject:
         self.max_velocity = 65.0
         self.max_angular_velocity = 10
 
+        self.platoon = platoon
         self.optimal_distance = optimal_distance
 
         self.sensor_line = SensorLine(self, show=True)
@@ -159,7 +160,7 @@ class CarObject:
         self.acceleration = 0.0
         self.velocity = 0.0
 
-    def step(self, action, distance):
+    def step(self, action, all_cars):
         self.acceleration = 0.0
         self.steering = 0
         if action == 1:
@@ -177,7 +178,11 @@ class CarObject:
             self.acceleration = self.max_acceleration
             self.steering = 1
 
-        distance = distance * self.sensor_distance.max_distance
+        distance = self.getState(all_cars)[4] * self.sensor_distance.max_distance
+        if self.platoon != None and self != self.platoon.first:
+            distance = distance + (self.platoon.first.velocity**2) / (2 * self.platoon.first.max_acceleration) + max(0.0, self.platoon.first.acceleration)
+            # distance = distance + np.clip(self.platoon.first.velocity + self.platoon.first.acceleration, 0, self.platoon.first.max_velocity)
+            print(f"{self.getState(all_cars)[4] * self.sensor_distance.max_distance:.2f}")
 
         brake_distance = (self.velocity**2) / (2 * self.max_acceleration)
         if (distance - self.optimal_distance) <= brake_distance:
@@ -205,7 +210,7 @@ class CarObject:
 
         self.velocity = self.velocity + self.acceleration * dt
         if self.acceleration == 0.0:
-            self.velocity = self.velocity - self.max_acceleration * dt
+            self.velocity = self.velocity - (self.max_acceleration * 0.2) * dt
 
         if self.velocity > self.max_velocity:
             self.velocity = self.max_velocity
@@ -307,7 +312,7 @@ class Window(pg.window.Window):
                 all_cars = self.cars + [self.obstacle.car]
                 state = car.getState(all_cars)
                 action = car.predict(state)
-                car.step(action, state[4])
+                car.step(action, all_cars)
             car.update(dt)
 
         self.obstacle.update(self.cars, dt)
