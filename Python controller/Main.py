@@ -34,11 +34,12 @@ while run:
     
     if keys[pygame.K_LEFT]:
         print("left")
-        updateData(1,100,0,False,False,0)
+        updateData(1,50,0,False,False,0)
 
     if keys[pygame.K_RIGHT]:
         print("right")
-        updateData(1,0,100,False,False,0)
+        
+        updateData(1,0,50,False,False,0)
 
     if keys[pygame.K_UP]:
         print("up")
