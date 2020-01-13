@@ -10,6 +10,12 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"]="2"
 OBSERVATION_SPACE_N = 5
 ACTION_SPACE_N = 7
 
+# OBSERVATION_SPACE_N
+# [acceleration, velocity, line0, line1, distance]
+
+# ACTION_SPACE_N
+# [DO_NOTHING, ACCELERATE, LEFT, BRAKE, RIGHT, ACCELERATE+LEFT, ACCELERATE+RIGHT]
+
 class Estimator:
     def __init__(self):
         self.model = Sequential()

@@ -265,6 +265,22 @@ class ObstacleObject:
         self.car.sprite.rotation = self.data[self.idx][2]
         self.car.update(dt)
 
+class Platoon:
+    def __init__(self, distance):
+        self.distance = distance
+        self.first = None
+        self.cars = []
+
+    def addCar(self, car):
+        if self.first == None:
+            self.first = car
+            car.max_velocity = 60.0
+        else:
+            car.optimal_distance = self.distance
+    
+        car.platoon = self
+        self.cars.append(car)
+
 class Window(pg.window.Window):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
