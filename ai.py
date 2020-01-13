@@ -53,10 +53,8 @@ class Estimator:
         
         self.model.train_on_batch(state, td_target)
         
-    
     def save(self, filename):
         self.model.save(f"./models/{filename}.h5")
         
     def load(self, filename):
         self.model.load_weights(f"./models/{filename}.h5")
-        self.updateTarget()

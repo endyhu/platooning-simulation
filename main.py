@@ -18,8 +18,14 @@ def updateData(id,leftspeed,rightspeed,leftlinesensor,rightlinesensor,ultrasonic
     return r.status_code
 
 def main():
+    estimator = ai.Estimator()
+    estimator.load("_705.76_00057137_06_1452")
+
     while True:
-        print(getData(1))
+        output_data = getData(1)
+        # prediction = ai.predict()
+        print(output_data.values())
+
         time.sleep(1)
         
 main()
