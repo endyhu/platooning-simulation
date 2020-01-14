@@ -35,6 +35,8 @@ class Estimator:
         
     def preprocess(self, pre_state):
         state = np.copy(pre_state)
+        state[0] = state[0] / 100
+        state[1] = state[1] / 100
         state[4] = 1.0
 
         return state.reshape(-1, OBSERVATION_SPACE_N)
