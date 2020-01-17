@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Threading.Tasks;
 using System.Web.Http;
 using System.Web.Http.Description;
 using WebApplication1.Models;
@@ -38,17 +39,20 @@ namespace WebApplication1.Controllers
 
         // PUT: api/Data.Cars/5
         [HttpPut]
-        public IHttpActionResult Put([FromBody]Car value)
+        public async Task<IHttpActionResult> Put([FromBody]Car value)
         {
-
+            
             var product = Data.Cars.FirstOrDefault((p) => p.id == value.id);
             if (product == null)
             {
                 return NotFound();
             }
-            Car car = value;
-            Data.Cars[car.id - 1] = car; //new Car { id = car.id, leftspeed = car.leftspeed,rightspeed= car.rightspeed, leftlinesensor = car.leftlinesensor, rightlinesensor = car.rightlinesensor, ultrasonicsensor= car.ultrasonicsensor };
-            return Ok();
+            else
+            {
+                Car car = value;
+                await Task.Run(() => Data.Cars[car.id - 1] = car); 
+                return Ok();
+            }
         }
 
         // DELETE: api/Cars/5
