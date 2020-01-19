@@ -1,8 +1,12 @@
+import ai
 import cv2
 import numpy as np
 import pyglet as pg
 
 from pyglet.window import key
+
+ESTIMATOR = ai.Estimator()
+ESTIMATOR.load("_705.76_00057137_06_1452")
 
 DISPLAY = pg.canvas.get_display()
 SCREEN = DISPLAY.get_default_screen()
@@ -295,20 +299,47 @@ class Window(pg.window.Window):
         self.obstacle = ObstacleObject(66.0, 300)
         self.cars = []
 
+        self.platoons = []
+
     def createCar(self, pos_x, pos_y, optimal_distance=33.0, image=car1_img):
         new_car = CarObject(pos_x, pos_y, optimal_distance, image)
         self.cars.append(new_car)
 
         return new_car
 
+    def createPlatoon(self, distance, n_cars=5):
+        new_platoon = Platoon(distance)
+        self.platoons.append(new_platoon)
+
+        for i in range(n_cars):
+            new_car = self.createCar(500 - (33 * i), WINDOW_HEIGHT/2)
+            new_car.addEstimator(ESTIMATOR)
+            new_platoon.addCar(new_car)
+
+        return new_platoon
+
     def reset(self):
         self.obstacle.reset()
-        for car in self.cars:
-            car.reset()
+        self.cars = []
+        self.platoons = []
+        self.createPlatoon(11.0)
 
     def on_key_press(self, symbol, modifier):
         if symbol == key.R:
             self.reset()
+
+        if symbol in [key._1, key._2, key._3, key._4, key._5]:
+            car_idx = [key._1, key._2, key._3, key._4, key._5].index(symbol)
+            try:
+                removed_car = self.platoons[0].cars.pop(car_idx)
+                removed_car.optimal_distance = 33.0
+                removed_car.platoon = None
+                if self.platoons[0].first == removed_car:
+                    self.platoons[0].first = self.platoons[0].cars[0]
+                    self.platoons[0].first.optimal_distance = 33.0
+                self.cars.pop(self.cars.index(removed_car))
+            except:
+                pass
 
     def on_draw(self):
         self.clear()
