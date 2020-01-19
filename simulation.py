@@ -16,7 +16,7 @@ WINDOW_HEIGHT = 600
 
 KEYS = key.KeyStateHandler()
 
-MAP_IMG = "./assets/map2.png"
+MAP_IMG = "./assets/map3.png"
 
 background_img = pg.image.load(MAP_IMG)
 car1_img = pg.image.load("./assets/car1.png")
@@ -38,6 +38,7 @@ class SensorLine:
         self.show = show
         self.detector_sprites = []
         self.sprite_batch = pg.graphics.Batch()
+        self.threshold = 100
 
         for _ in range(2):
             self.detector_sprites.append(pg.sprite.Sprite(sensor_img, self.car.sprite.x, self.car.sprite.y, batch=self.sprite_batch))
@@ -49,7 +50,7 @@ class SensorLine:
         for sprite in self.detector_sprites:
             data = background_data[600 - int(sprite.y), int(sprite.x)]
             data_bool = 0
-            if np.sum(data) > 30:
+            if np.sum(data) > self.threshold:
                 data_bool = 1
 
             output_data.append(data)
@@ -130,7 +131,7 @@ class CarObject:
         self.velocity_y = 0.0
 
         self.max_acceleration = 20.0
-        self.max_velocity = 65.0
+        self.max_velocity = 80.0
         self.max_angular_velocity = 10
 
         self.platoon = platoon
@@ -186,7 +187,7 @@ class CarObject:
         if self.platoon != None and self != self.platoon.first:
             distance = distance + (self.platoon.first.velocity**2) / (2 * self.platoon.first.max_acceleration) + max(0.0, self.platoon.first.acceleration)
             # distance = distance + np.clip(self.platoon.first.velocity + self.platoon.first.acceleration, 0, self.platoon.first.max_velocity)
-            print(f"{self.getState(all_cars)[4] * self.sensor_distance.max_distance:.2f}")
+            # print(f"{self.getState(all_cars)[4] * self.sensor_distance.max_distance:.2f}")
 
         brake_distance = (self.velocity**2) / (2 * self.max_acceleration)
         if (distance - self.optimal_distance) <= brake_distance:
@@ -239,8 +240,8 @@ class ObstacleObject:
         self.data = [
             [594.89463, 185.91862,   91.06800],
             [688.71395,  41.85971,    0.32730],
-            [735.40366, 413.63733,  -90.47457],
-            [651.71919, 526.01366, -175.59751],
+            # [735.40366, 413.63733,  -90.47457],
+            # [651.71919, 526.01366, -175.59751],
             [314.79445, 496.40442, -185.99217],
             [109.75403, 288.53455, -274.26786],
             [111.37117,  37.04259, -323.63017],
@@ -316,6 +317,8 @@ class Window(pg.window.Window):
             new_car.addEstimator(ESTIMATOR)
             new_platoon.addCar(new_car)
 
+        new_platoon.cars[1].sensor_line.threshold = 50
+
         return new_platoon
 
     def reset(self):
@@ -333,11 +336,30 @@ class Window(pg.window.Window):
             try:
                 removed_car = self.platoons[0].cars.pop(car_idx)
                 removed_car.optimal_distance = 33.0
+                removed_car.max_velocity = 65.0
                 removed_car.platoon = None
                 if self.platoons[0].first == removed_car:
                     self.platoons[0].first = self.platoons[0].cars[0]
                     self.platoons[0].first.optimal_distance = 33.0
+                    self.platoons[0].first.max_velocity = 60.0
                 self.cars.pop(self.cars.index(removed_car))
+                print(f"Removed Car in Position {car_idx + 1}.")
+            except:
+                pass
+
+        if symbol in [key.NUM_1, key.NUM_2, key.NUM_3, key.NUM_4, key.NUM_5]:
+            car_idx = [key.NUM_1, key.NUM_2, key.NUM_3, key.NUM_4, key.NUM_5].index(symbol)
+            try:
+                new_first = self.platoons[0].cars.pop(car_idx)
+                new_first.sensor_line.threshold = 100.0
+                new_first.optimal_distance = 33.0
+                new_first.max_velocity = 60.0
+                self.platoons[0].first.optimal_distance = self.platoons[0].distance
+                self.platoons[0].first.sensor_line.threshold = 50.0
+                self.platoons[0].first.max_velocity = 80.0
+                self.platoons[0].first = new_first
+                self.platoons[0].cars.insert(0, new_first)
+                print(f"Car in Position {car_idx + 1} is the new Platoon Leader.")
             except:
                 pass
 
