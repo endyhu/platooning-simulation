@@ -131,7 +131,7 @@ class CarObject:
         self.velocity_y = 0.0
 
         self.max_acceleration = 20.0
-        self.max_velocity = 80.0
+        self.max_velocity = 75.0
         self.max_angular_velocity = 10
 
         self.platoon = platoon
@@ -336,7 +336,7 @@ class Window(pg.window.Window):
             try:
                 removed_car = self.platoons[0].cars.pop(car_idx)
                 removed_car.optimal_distance = 33.0
-                removed_car.max_velocity = 65.0
+                removed_car.max_velocity = 75.0
                 removed_car.platoon = None
                 if self.platoons[0].first == removed_car:
                     self.platoons[0].first = self.platoons[0].cars[0]
@@ -356,7 +356,7 @@ class Window(pg.window.Window):
                 new_first.max_velocity = 60.0
                 self.platoons[0].first.optimal_distance = self.platoons[0].distance
                 self.platoons[0].first.sensor_line.threshold = 50.0
-                self.platoons[0].first.max_velocity = 80.0
+                self.platoons[0].first.max_velocity = 75.0
                 self.platoons[0].first = new_first
                 self.platoons[0].cars.insert(0, new_first)
                 print(f"Car in Position {car_idx + 1} is the new Platoon Leader.")
